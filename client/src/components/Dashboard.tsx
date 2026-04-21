@@ -813,7 +813,7 @@ function SettingsView() {
       <Panel title="פרטי הקליניקה">
         <div className="py-4 space-y-4">
           <KV k="שם הקליניקה" v="קרן שריג — רפואה סינית" />
-          <KV k="כתובת" v="מזכרת בתיה" />
+          <KV k="כתובת" v="סוקולוב 40, רמת השרון, קומה 3" />
           <KV k="טלפון" v={<span style={{ direction: 'ltr' }}>050-9031503</span>} />
         </div>
       </Panel>

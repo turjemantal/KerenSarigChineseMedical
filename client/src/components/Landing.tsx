@@ -334,7 +334,7 @@ function Footer() {
           <div className="md:col-span-3">
             <div style={{ fontSize: 11.5, letterSpacing: '0.18em', color: '#B8C5B8' }}>יצירת קשר</div>
             <div className="mt-4" style={{ fontSize: 14.5, lineHeight: 1.7 }}>
-              <div>רמת השרון</div>
+              <div>סוקולוב 40, רמת השרון, קומה 3</div>
               <div className="mt-3 flex items-center gap-2"><Icon.Phone s={13} /> 050-9031503</div>
               <div className="flex items-center gap-2"><Icon.Mail s={13} /> karintip1@gmail.com</div>
             </div>
