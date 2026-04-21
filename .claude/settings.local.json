@@ -14,7 +14,14 @@
       "Bash(xargs kill *)",
       "Bash(npx jest *)",
       "Bash(docker exec keren-mongo *)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(git rm *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git -C /Users/talturjeman/Projects/kerenWebsite add server/tsconfig.json)"
     ]
   }
 }

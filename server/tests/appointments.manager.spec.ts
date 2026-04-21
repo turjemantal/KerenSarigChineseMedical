@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
 import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
+import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
 
 const appt1 = { _id: 'a1', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00', status: 'pending' };
 const appt2 = { _id: 'a2', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '10:30', status: 'pending' };
@@ -12,8 +12,14 @@ const mockService = {
   findByDate: jest.fn(),
   findByPhone: jest.fn(),
   findById: jest.fn(),
+  findScheduledForDate: jest.fn(),
+  markReminderSent: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
+};
+
+const mockWhatsapp = {
+  sendTemplate: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('AppointmentsManager', () => {
@@ -24,6 +30,7 @@ describe('AppointmentsManager', () => {
       providers: [
         AppointmentsManager,
         { provide: AppointmentsService, useValue: mockService },
+        { provide: WhatsappService, useValue: mockWhatsapp },
       ],
     }).compile();
     manager = module.get<AppointmentsManager>(AppointmentsManager);

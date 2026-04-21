@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { Appointment, AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 
 @Injectable()
 export class AppointmentsDao {
@@ -18,7 +19,7 @@ export class AppointmentsDao {
   }
 
   findByDate(date: string): Promise<AppointmentDocument[]> {
-    return this.model.find({ date, status: { $ne: 'cancelled' } }).exec();
+    return this.model.find({ date, status: { $ne: AppointmentStatus.CANCELLED } }).exec();
   }
 
   findByPhone(phone: string): Promise<AppointmentDocument[]> {
@@ -29,8 +30,20 @@ export class AppointmentsDao {
     return this.model.findById(id).exec();
   }
 
+  findScheduledForDate(date: string): Promise<AppointmentDocument[]> {
+    return this.model.find({
+      date,
+      status: AppointmentStatus.SCHEDULED,
+      reminderSent: false,
+    }).exec();
+  }
+
   update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument | null> {
     return this.model.findByIdAndUpdate(id, dto, { new: true }).exec();
+  }
+
+  markReminderSent(id: string): Promise<AppointmentDocument | null> {
+    return this.model.findByIdAndUpdate(id, { reminderSent: true }, { new: true }).exec();
   }
 
   delete(id: string): Promise<AppointmentDocument | null> {

@@ -4,8 +4,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Otp, OtpDocument } from './otp.schema';
 import { ClientsService } from '../clients/clients.service';
+import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
+import { WHATSAPP_TEMPLATE } from '../integrations/whatsapp/whatsapp.constants';
 import { OTP_CODE_MIN, OTP_CODE_RANGE } from '../common/constants/otp.constants';
 import { JWT_ADMIN_EXPIRY } from '../common/constants/jwt.constants';
+import { otpParams } from '../common/constants/messages.constants';
 
 @Injectable()
 export class AuthService {
@@ -13,16 +16,14 @@ export class AuthService {
     @InjectModel(Otp.name) private otpModel: Model<OtpDocument>,
     private readonly jwtService: JwtService,
     private readonly clientsService: ClientsService,
+    private readonly whatsapp: WhatsappService,
   ) {}
 
   async requestOtp(phone: string): Promise<{ message: string }> {
     const code = Math.floor(OTP_CODE_MIN + Math.random() * OTP_CODE_RANGE).toString();
     await this.otpModel.deleteMany({ phone });
     await this.otpModel.create({ phone, code });
-
-    // TODO: send via SMS provider (Twilio / MessageBird)
-    console.log(`[OTP] ${phone} → ${code}`);
-
+    await this.whatsapp.sendTemplate(phone, WHATSAPP_TEMPLATE.OTP, otpParams(code));
     return { message: 'OTP sent' };
   }
 

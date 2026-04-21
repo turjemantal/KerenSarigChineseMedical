@@ -30,6 +30,14 @@ export class AppointmentsService {
     return appt;
   }
 
+  findScheduledForDate(date: string): Promise<AppointmentDocument[]> {
+    return this.dao.findScheduledForDate(date);
+  }
+
+  markReminderSent(id: string): Promise<AppointmentDocument | null> {
+    return this.dao.markReminderSent(id);
+  }
+
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
     const appt = await this.dao.update(id, dto);
     if (!appt) throw new NotFoundException(`Appointment ${id} not found`);

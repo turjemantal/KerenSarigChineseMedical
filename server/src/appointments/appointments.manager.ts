@@ -1,16 +1,29 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
+import { WHATSAPP_TEMPLATE } from '../integrations/whatsapp/whatsapp.constants';
+import { bookingParams, reminderParams } from '../common/constants/messages.constants';
 
 @Injectable()
 export class AppointmentsManager {
-  constructor(private readonly service: AppointmentsService) {}
+  private readonly logger = new Logger(AppointmentsManager.name);
+
+  constructor(
+    private readonly service: AppointmentsService,
+    private readonly whatsapp: WhatsappService,
+  ) {}
 
   async book(dto: CreateAppointmentDto): Promise<AppointmentDocument> {
     const appt = await this.service.create(dto);
-    // future: send confirmation SMS/email here
+    this.whatsapp.sendTemplate(
+      appt.phone,
+      WHATSAPP_TEMPLATE.BOOKING_CONFIRMATION,
+      bookingParams(appt.name, appt.date, appt.time),
+    );
     return appt;
   }
 
@@ -36,5 +49,29 @@ export class AppointmentsManager {
 
   remove(id: string): Promise<void> {
     return this.service.delete(id);
+  }
+
+  @Cron('0 9 * * *')
+  async sendDailyReminders(): Promise<void> {
+    const tomorrow = this.getTomorrowDate();
+    const appointments = await this.service.findScheduledForDate(tomorrow);
+
+    this.logger.log(`[Reminders] Sending ${appointments.length} reminder(s) for ${tomorrow}`);
+
+    for (const appt of appointments) {
+      await this.whatsapp.sendTemplate(
+        appt.phone,
+        WHATSAPP_TEMPLATE.APPOINTMENT_REMINDER,
+        reminderParams(appt.time),
+      );
+      await this.service.markReminderSent(String(appt._id));
+    }
+  }
+
+  private getTomorrowDate(): string {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 }

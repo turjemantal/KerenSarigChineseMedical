@@ -5,6 +5,7 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from '../src/auth/auth.service';
 import { Otp } from '../src/auth/otp.schema';
 import { ClientsService } from '../src/clients/clients.service';
+import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
 
 const validPhone = '0501234567';
 const mockOtp = { phone: validPhone, code: '123456', expiresAt: new Date(Date.now() + 60_000) };
@@ -25,6 +26,10 @@ const mockJwtService = {
   sign: jest.fn(),
 };
 
+const mockWhatsappService = {
+  sendTemplate: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('AuthService', () => {
   let service: AuthService;
 
@@ -35,6 +40,7 @@ describe('AuthService', () => {
         { provide: getModelToken(Otp.name), useValue: mockOtpModel },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ClientsService, useValue: mockClientsService },
+        { provide: WhatsappService, useValue: mockWhatsappService },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);

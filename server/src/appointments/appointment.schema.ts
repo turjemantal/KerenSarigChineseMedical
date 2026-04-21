@@ -36,6 +36,9 @@ export class Appointment {
 
   @Prop({ default: DEFAULT_SOURCE })
   source: string;
+
+  @Prop({ default: false })
+  reminderSent: boolean;
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
