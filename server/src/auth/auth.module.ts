@@ -1,0 +1,25 @@
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { MongooseModule } from '@nestjs/mongoose';
+import { Otp, OtpSchema } from './otp.schema';
+import { JwtStrategy } from './jwt.strategy';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { ClientsModule } from '../clients/clients.module';
+import { JWT_SECRET_FALLBACK, JWT_CLIENT_EXPIRY } from '../common/constants/jwt.constants';
+
+@Module({
+  imports: [
+    PassportModule,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || JWT_SECRET_FALLBACK,
+      signOptions: { expiresIn: JWT_CLIENT_EXPIRY },
+    }),
+    MongooseModule.forFeature([{ name: Otp.name, schema: OtpSchema }]),
+    ClientsModule,
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy],
+})
+export class AuthModule {}

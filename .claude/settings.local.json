@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(npm list *)",
+      "Bash(pkill -f vite)",
+      "Bash(docker run *)",
+      "Bash(curl -s http://localhost:3001/api/leads)",
+      "Bash(pkill -f \"nest start\")",
+      "Bash(docker stop *)",
+      "Bash(xargs kill *)",
+      "Bash(npx jest *)",
+      "Bash(docker exec keren-mongo *)",
+      "Bash(npm test *)"
+    ]
+  }
+}
