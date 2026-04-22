@@ -1,24 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { createLeadSchema, updateLeadSchema } from '../src/leads/validations/lead.schemas';
-import { createAppointmentSchema, updateAppointmentSchema } from '../src/appointments/validations/appointment.schemas';
-import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from '../src/auth/validations/auth.schemas';
-import { JoiValidationGuard, JOI_SCHEMA_KEY } from '../src/common/guards/joi-validation.guard';
+import { createLeadSchema, updateLeadSchema } from '../src/leads/dto/validations/lead.schemas';
+import { createAppointmentSchema, updateAppointmentSchema } from '../src/appointments/dto/validations/appointment.schemas';
+import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from '../src/auth/dto/validations/auth.schemas';
+import { JoiValidationPipe } from '../src/common/pipes/joi-validation.pipe';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { LeadStatus } from '../src/common/enums/lead-status.enum';
-
-// ── helpers ────────────────────────────────────────────────────────────────────
-
-function makeContext(body: unknown, schema?: unknown) {
-  const reflector = new Reflector();
-  jest.spyOn(reflector, 'get').mockReturnValue(schema);
-  const req: any = { body };
-  const ctx: any = {
-    switchToHttp: () => ({ getRequest: () => req }),
-    getHandler: () => ({}),
-  };
-  return { guard: new JoiValidationGuard(reflector), ctx, req };
-}
 
 // ── Lead schemas ───────────────────────────────────────────────────────────────
 
@@ -212,33 +198,27 @@ describe('updateNameSchema', () => {
   });
 });
 
-// ── JoiValidationGuard ─────────────────────────────────────────────────────────
+// ── JoiValidationPipe ─────────────────────────────────────────────────────────
 
-describe('JoiValidationGuard', () => {
-  it('returns true and strips unknown fields from req.body on success', () => {
-    const body = { name: 'ישראל ישראלי', phone: '0501234567', concern: 'כאב גב כרוני', extra: 'drop' };
-    const { guard, ctx, req } = makeContext(body, createLeadSchema);
-    expect(guard.canActivate(ctx)).toBe(true);
-    expect(req.body).not.toHaveProperty('extra');
-    expect(req.body).toMatchObject({ name: 'ישראל ישראלי', phone: '0501234567' });
+describe('JoiValidationPipe', () => {
+  it('returns validated value and strips unknown fields', () => {
+    const pipe = new JoiValidationPipe(createLeadSchema);
+    const result = pipe.transform({ name: 'ישראל ישראלי', phone: '0501234567', concern: 'כאב גב כרוני', extra: 'drop' });
+    expect(result).not.toHaveProperty('extra');
+    expect(result).toMatchObject({ name: 'ישראל ישראלי', phone: '0501234567' });
   });
 
   it('throws BadRequestException when body fails schema validation', () => {
-    const { guard, ctx } = makeContext({ name: 'X', phone: 'bad', concern: 'ok ok ok' }, createLeadSchema);
-    expect(() => guard.canActivate(ctx)).toThrow(BadRequestException);
+    const pipe = new JoiValidationPipe(createLeadSchema);
+    expect(() => pipe.transform({ name: 'X', phone: 'bad', concern: 'ok ok ok' })).toThrow(BadRequestException);
   });
 
   it('joins multiple field errors with a semicolon separator', () => {
-    const { guard, ctx } = makeContext({ name: 'X', phone: 'bad' }, createLeadSchema);
+    const pipe = new JoiValidationPipe(createLeadSchema);
     try {
-      guard.canActivate(ctx);
+      pipe.transform({ name: 'X', phone: 'bad' });
     } catch (e: any) {
       expect(e.message).toContain(';');
     }
-  });
-
-  it('passes through without error when no schema is set on the handler', () => {
-    const { guard, ctx } = makeContext({ anything: 'goes' }, undefined);
-    expect(guard.canActivate(ctx)).toBe(true);
   });
 });

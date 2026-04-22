@@ -14,8 +14,8 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { JoiBody } from '../common/guards/joi-body.decorator';
-import { createAppointmentSchema, updateAppointmentSchema } from './validations/appointment.schemas';
+import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
+import { createAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 
@@ -25,8 +25,10 @@ export class AppointmentsController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  @JoiBody(createAppointmentSchema)
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateAppointmentDto) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body(new JoiValidationPipe(createAppointmentSchema)) dto: CreateAppointmentDto,
+  ) {
     return this.manager.book({ ...dto, phone: user.phone, name: dto.name || user.name || user.phone });
   }
 
@@ -53,8 +55,10 @@ export class AppointmentsController {
   }
 
   @Patch(':id')
-  @JoiBody(updateAppointmentSchema)
-  update(@Param('id') id: string, @Body() dto: UpdateAppointmentDto) {
+  update(
+    @Param('id') id: string,
+    @Body(new JoiValidationPipe(updateAppointmentSchema)) dto: UpdateAppointmentDto,
+  ) {
     return this.manager.update(id, dto);
   }
 

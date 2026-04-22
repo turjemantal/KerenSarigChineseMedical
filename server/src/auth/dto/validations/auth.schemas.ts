@@ -4,7 +4,7 @@ import {
   NAME_MIN_LENGTH,
   NAME_MAX_LENGTH,
   OTP_CODE_LENGTH,
-} from '../../common/constants/validation.constants';
+} from '../../../common/constants/validation.constants';
 
 export const requestOtpSchema = Joi.object({
   phone: Joi.string().pattern(PHONE_REGEX).required().messages({

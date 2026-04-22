@@ -2,16 +2,15 @@ import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/commo
 import { LeadsManager } from './leads.manager';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
-import { JoiBody } from '../common/guards/joi-body.decorator';
-import { createLeadSchema, updateLeadSchema } from './validations/lead.schemas';
+import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
+import { createLeadSchema, updateLeadSchema } from './dto/validations/lead.schemas';
 
 @Controller('leads')
 export class LeadsController {
   constructor(private readonly leadsManager: LeadsManager) {}
 
   @Post()
-  @JoiBody(createLeadSchema)
-  create(@Body() dto: CreateLeadDto) {
+  create(@Body(new JoiValidationPipe(createLeadSchema)) dto: CreateLeadDto) {
     return this.leadsManager.submitLead(dto);
   }
 
@@ -26,8 +25,10 @@ export class LeadsController {
   }
 
   @Patch(':id')
-  @JoiBody(updateLeadSchema)
-  update(@Param('id') id: string, @Body() dto: UpdateLeadDto) {
+  update(
+    @Param('id') id: string,
+    @Body(new JoiValidationPipe(updateLeadSchema)) dto: UpdateLeadDto,
+  ) {
     return this.leadsManager.updateStatus(id, dto);
   }
 

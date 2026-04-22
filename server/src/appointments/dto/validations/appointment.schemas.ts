@@ -1,5 +1,5 @@
 import * as Joi from 'joi';
-import { AppointmentStatus } from '../../common/enums/appointment-status.enum';
+import { AppointmentStatus } from '../../../common/enums/appointment-status.enum';
 import {
   PHONE_REGEX,
   DATE_REGEX,
@@ -10,7 +10,7 @@ import {
   NOTES_MAX_LENGTH,
   SOURCE_MAX_LENGTH,
   TREATMENT_MAX_LENGTH,
-} from '../../common/constants/validation.constants';
+} from '../../../common/constants/validation.constants';
 
 export const createAppointmentSchema = Joi.object({
   name: Joi.string().trim().min(NAME_MIN_LENGTH).max(NAME_MAX_LENGTH).optional(),

@@ -1,5 +1,5 @@
 import * as Joi from 'joi';
-import { LeadStatus } from '../../common/enums/lead-status.enum';
+import { LeadStatus } from '../../../common/enums/lead-status.enum';
 import {
   PHONE_REGEX,
   NAME_MIN_LENGTH,
@@ -9,7 +9,7 @@ import {
   NOTES_MAX_LENGTH,
   SOURCE_MAX_LENGTH,
   TREATMENT_MAX_LENGTH,
-} from '../../common/constants/validation.constants';
+} from '../../../common/constants/validation.constants';
 
 export const createLeadSchema = Joi.object({
   name: Joi.string().trim().min(NAME_MIN_LENGTH).max(NAME_MAX_LENGTH).required().messages({

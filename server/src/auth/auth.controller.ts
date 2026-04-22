@@ -2,36 +2,39 @@ import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
-import { JoiBody } from '../common/guards/joi-body.decorator';
-import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from './validations/auth.schemas';
 import { AuthUser } from './jwt.strategy';
+import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
+import { RequestOtpDto } from './dto/request-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
+import { UpdateNameDto } from './dto/update-name.dto';
+import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from './dto/validations/auth.schemas';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('admin')
-  @JoiBody(adminLoginSchema)
-  adminLogin(@Body() body: { password: string }) {
-    return this.authService.adminLogin(body.password);
+  adminLogin(@Body(new JoiValidationPipe(adminLoginSchema)) dto: AdminLoginDto) {
+    return this.authService.adminLogin(dto.password);
   }
 
   @Post('request-otp')
-  @JoiBody(requestOtpSchema)
-  requestOtp(@Body() body: { phone: string }) {
-    return this.authService.requestOtp(body.phone);
+  requestOtp(@Body(new JoiValidationPipe(requestOtpSchema)) dto: RequestOtpDto) {
+    return this.authService.requestOtp(dto.phone);
   }
 
   @Post('verify-otp')
-  @JoiBody(verifyOtpSchema)
-  verifyOtp(@Body() body: { phone: string; code: string; name?: string }) {
-    return this.authService.verifyOtp(body.phone, body.code, body.name);
+  verifyOtp(@Body(new JoiValidationPipe(verifyOtpSchema)) dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto.phone, dto.code, dto.name);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch('me/name')
-  @JoiBody(updateNameSchema)
-  updateName(@CurrentUser() user: AuthUser, @Body() body: { name: string }) {
-    return this.authService.updateName(user.phone, body.name);
+  updateName(
+    @CurrentUser() user: AuthUser,
+    @Body(new JoiValidationPipe(updateNameSchema)) dto: UpdateNameDto,
+  ) {
+    return this.authService.updateName(user.phone, dto.name);
   }
 }
