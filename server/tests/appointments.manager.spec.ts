@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
 import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
+import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 
 const appt1 = { _id: 'a1', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00', status: 'pending' };
 const appt2 = { _id: 'a2', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '10:30', status: 'pending' };
@@ -100,16 +101,16 @@ describe('AppointmentsManager', () => {
 
   describe('update', () => {
     it('cancels an appointment', async () => {
-      mockService.update.mockResolvedValueOnce({ ...appt1, status: 'cancelled' });
-      const result = await manager.update('a1', { status: 'cancelled' });
-      expect(result.status).toBe('cancelled');
-      expect(mockService.update).toHaveBeenCalledWith('a1', { status: 'cancelled' });
+      mockService.update.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.CANCELLED });
+      const result = await manager.update('a1', { status: AppointmentStatus.CANCELLED });
+      expect(result.status).toBe(AppointmentStatus.CANCELLED);
+      expect(mockService.update).toHaveBeenCalledWith('a1', { status: AppointmentStatus.CANCELLED });
     });
 
     it('approves a pending appointment (pending → scheduled)', async () => {
-      mockService.update.mockResolvedValueOnce({ ...appt1, status: 'scheduled' });
-      const result = await manager.update('a1', { status: 'scheduled' });
-      expect(result.status).toBe('scheduled');
+      mockService.update.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
+      const result = await manager.update('a1', { status: AppointmentStatus.SCHEDULED });
+      expect(result.status).toBe(AppointmentStatus.SCHEDULED);
     });
 
     it('updates notes on an appointment', async () => {

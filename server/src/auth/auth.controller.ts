@@ -4,8 +4,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { JoiBody } from '../common/guards/joi-body.decorator';
 import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from './validations/auth.schemas';
-
-interface AuthUser { clientId: string; phone: string; name?: string }
+import { AuthUser } from './jwt.strategy';
 
 @Controller('auth')
 export class AuthController {

@@ -1,9 +1,6 @@
-import { IsOptional, IsString } from 'class-validator';
+import { AppointmentStatus } from '../../common/enums/appointment-status.enum';
 
 export class UpdateAppointmentDto {
-  @IsOptional() @IsString()
-  status?: string;
-
-  @IsOptional() @IsString()
+  status?: AppointmentStatus;
   notes?: string;
 }

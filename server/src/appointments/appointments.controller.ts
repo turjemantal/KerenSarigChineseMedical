@@ -16,8 +16,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JoiBody } from '../common/guards/joi-body.decorator';
 import { createAppointmentSchema, updateAppointmentSchema } from './validations/appointment.schemas';
-
-interface AuthUser { clientId: string; phone: string; name?: string }
+import { AuthUser } from '../auth/jwt.strategy';
+import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 
 @Controller('appointments')
 export class AppointmentsController {
@@ -60,7 +60,7 @@ export class AppointmentsController {
 
   @Patch(':id/approve')
   approve(@Param('id') id: string) {
-    return this.manager.update(id, { status: 'scheduled' });
+    return this.manager.update(id, { status: AppointmentStatus.SCHEDULED });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -68,7 +68,7 @@ export class AppointmentsController {
   async cancelOwn(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     const appt = await this.manager.getById(id);
     if (appt.phone !== user.phone) throw new ForbiddenException();
-    return this.manager.update(id, { status: 'cancelled' });
+    return this.manager.update(id, { status: AppointmentStatus.CANCELLED });
   }
 
   @Delete(':id')
