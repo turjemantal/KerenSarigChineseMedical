@@ -18,7 +18,7 @@ export default function Landing({ onBook, onContact, onPortal, isLoggedIn }: { o
 }
 
 // ---------- ניווט ----------
-function LandingNav({ onBook, onContact, onPortal, isLoggedIn: _isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
+function LandingNav({ onBook, onContact, onPortal }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
   const [open, setOpen] = useState(false)
   const links = [
     { label: 'אודות', href: '#about' },

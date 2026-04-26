@@ -13,8 +13,8 @@ export const config = {
     get secret(): string {
       return process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
     },
-    clientExpiry: '30d',
-    adminExpiry: '12h',
+    clientExpiry: '30d' as const,
+    adminExpiry: '12h' as const,
   },
 
   get adminPassword(): string | undefined {
