@@ -32,3 +32,6 @@ server/dist/
 
 # Test coverage
 coverage/
+
+# Claude Code
+.claude/settings.local.json
