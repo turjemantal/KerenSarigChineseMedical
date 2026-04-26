@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Enso, Icon, Button } from './shared'
+import { Enso, Button } from './shared'
+import { Icon } from './icons'
 import { saveAdminToken } from '../auth'
 
 export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {

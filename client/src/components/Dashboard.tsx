@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Enso, Icon, Button, Avatar } from './shared'
+import { Enso, Button, Avatar } from './shared'
+import { Icon } from './icons'
 import { clearAdminToken } from '../auth'
 
 // ---------- Types ----------
@@ -32,31 +33,35 @@ interface Appointment {
 function useLeads() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const refresh = () => {
     setLoading(true)
+    setError(false)
     fetch('/api/leads')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Lead[]> })
       .then(setLeads)
-      .catch(() => {})
+      .catch(() => setError(true))
       .finally(() => setLoading(false))
   }
   useEffect(refresh, [])
-  return { leads, loading, refresh }
+  return { leads, loading, error, refresh }
 }
 
 function useAppointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const refresh = () => {
     setLoading(true)
+    setError(false)
     fetch('/api/appointments')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Appointment[]> })
       .then(setAppointments)
-      .catch(() => {})
+      .catch(() => setError(true))
       .finally(() => setLoading(false))
   }
   useEffect(refresh, [])
-  return { appointments, loading, refresh }
+  return { appointments, loading, error, refresh }
 }
 
 // ---------- Helpers ----------
@@ -410,14 +415,21 @@ function LeadsView({ leads, onSelect }: { leads: Lead[]; onSelect: (l: Lead) => 
 // ---------- LeadDrawer ----------
 function LeadDrawer({ lead, onClose, onStatusChange }: { lead: Lead; onClose: () => void; onStatusChange: () => void }) {
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
 
   const updateStatus = async (status: string) => {
     setSaving(true)
+    setSaveError(false)
     try {
-      await fetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+      const res = await fetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+      if (!res.ok) throw new Error()
       onStatusChange()
       onClose()
-    } catch { /* ignore fetch errors, loading state cleared in finally */ } finally { setSaving(false) }
+    } catch {
+      setSaveError(true)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -436,12 +448,15 @@ function LeadDrawer({ lead, onClose, onStatusChange }: { lead: Lead; onClose: ()
       {lead.email && <KV k="אימייל" v={lead.email} />}
       <KV k="תלונה עיקרית" v={lead.concern} multi />
       {lead.notes && <KV k="הערות" v={lead.notes} multi />}
+      {saveError && (
+        <div className="mt-4" style={{ fontSize: 13, color: '#C4634A' }}>שגיאה בשמירה — נסו שוב</div>
+      )}
       <div className="mt-8 grid grid-cols-2 gap-3">
-        <Button variant="primary" onClick={() => updateStatus('contacted')} disabled={saving}>סימון ״בקשר״</Button>
-        <Button variant="ghost" onClick={() => updateStatus('booked')} disabled={saving}>קביעת תור</Button>
+        <Button variant="primary" onClick={() => void updateStatus('contacted')} disabled={saving}>סימון ״בקשר״</Button>
+        <Button variant="ghost" onClick={() => void updateStatus('booked')} disabled={saving}>קביעת תור</Button>
       </div>
       <div className="mt-4">
-        <Button variant="quiet" onClick={() => updateStatus('closed')} disabled={saving} className="w-full">סגירת פנייה</Button>
+        <Button variant="quiet" onClick={() => void updateStatus('closed')} disabled={saving} className="w-full">סגירת פנייה</Button>
       </div>
     </Drawer>
   )
@@ -585,7 +600,8 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    const res = await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    if (!res.ok) return
     onStatusChange()
     setSelected(null)
   }
@@ -653,14 +669,14 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
           </div>
           <div className="mt-8 space-y-3">
             {selected.status === 'pending' && (
-              <Button variant="primary" onClick={() => updateStatus(selected._id, 'scheduled')} className="w-full">אישור התור</Button>
+              <Button variant="primary" onClick={() => void updateStatus(selected._id, 'scheduled')} className="w-full">אישור התור</Button>
             )}
             {selected.status === 'scheduled' && (
-              <Button variant="primary" onClick={() => updateStatus(selected._id, 'completed')} className="w-full">סימון כהושלם</Button>
+              <Button variant="primary" onClick={() => void updateStatus(selected._id, 'completed')} className="w-full">סימון כהושלם</Button>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="ghost" onClick={() => updateStatus(selected._id, 'cancelled')}>ביטול תור</Button>
-              <Button variant="quiet" onClick={() => updateStatus(selected._id, 'noshow')}>לא הגיע/ה</Button>
+              <Button variant="ghost" onClick={() => void updateStatus(selected._id, 'cancelled')}>ביטול תור</Button>
+              <Button variant="quiet" onClick={() => void updateStatus(selected._id, 'noshow')}>לא הגיע/ה</Button>
             </div>
           </div>
         </Drawer>
@@ -838,14 +854,20 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const [view, setView] = useState('today')
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [navOpen, setNavOpen] = useState(false)
-  const { leads, refresh: refreshLeads } = useLeads()
-  const { appointments, refresh: refreshAppts } = useAppointments()
+  const { leads, error: leadsError, refresh: refreshLeads } = useLeads()
+  const { appointments, error: apptError, refresh: refreshAppts } = useAppointments()
 
   return (
     <div className="flex min-h-screen" style={{ background: '#F5F1EA', color: '#1C2A24' }}>
       <Sidebar view={view} setView={v => { setView(v); setNavOpen(false) }} onExit={onExit} open={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 min-w-0 flex flex-col">
         <TopBar view={view} onOpenNav={() => setNavOpen(true)} />
+        {(leadsError || apptError) && (
+          <div className="px-6 md:px-10 py-3 flex items-center gap-3" style={{ background: '#FAE8E4', color: '#8B2A15', fontSize: 13 }}>
+            שגיאה בטעינת הנתונים —
+            <button className="underline" onClick={() => { refreshLeads(); refreshAppts() }}>נסו שוב</button>
+          </div>
+        )}
         <div className="flex-1 overflow-auto">
           {view === 'today'        && <TodayView appointments={appointments} leads={leads} />}
           {view === 'leads'        && <LeadsView leads={leads} onSelect={setSelectedLead} />}

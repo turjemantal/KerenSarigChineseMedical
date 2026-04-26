@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Enso, Icon, Button, Label, FormField } from './shared'
+import { Enso, Button, Label, FormField } from './shared'
+import { Icon } from './icons'
 
 interface ContactData {
   name: string

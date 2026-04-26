@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Enso, Icon, Button, Avatar } from './shared'
+import { Enso, Button, Avatar } from './shared'
+import { Icon } from './icons'
 import { AREAS } from '../data'
 
 export default function Landing({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
@@ -18,7 +19,7 @@ export default function Landing({ onBook, onContact, onPortal, isLoggedIn }: { o
 }
 
 // ---------- ניווט ----------
-function LandingNav({ onBook, onContact, onPortal }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
+function LandingNav({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
   const [open, setOpen] = useState(false)
   const links = [
     { label: 'אודות', href: '#about' },
@@ -46,7 +47,7 @@ function LandingNav({ onBook, onContact, onPortal }: { onBook: () => void; onCon
           <a href="tel:+972509031503" className="text-[14px] flex items-center gap-2" style={{ color: '#4A6B5C', direction: 'ltr' }}>
             <Icon.Phone s={14} /> 050-9031503
           </a>
-          <Button variant="ghost" size="sm" onClick={onPortal}>האזור האישי</Button>
+          <Button variant={isLoggedIn ? 'moss' : 'ghost'} size="sm" onClick={onPortal}>האזור האישי</Button>
           <Button variant="ghost" size="sm" onClick={onContact}>יצירת קשר</Button>
           <Button variant="primary" size="sm" onClick={onBook}>קביעת תור</Button>
         </div>
@@ -60,7 +61,7 @@ function LandingNav({ onBook, onContact, onPortal }: { onBook: () => void; onCon
               <Button variant="ghost" size="sm" onClick={() => { setOpen(false); onContact() }} className="flex-1">יצירת קשר</Button>
               <Button variant="primary" size="sm" onClick={() => { setOpen(false); onBook() }} className="flex-1">קביעת תור</Button>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => { setOpen(false); onPortal() }} className="w-full">האזור האישי</Button>
+            <Button variant={isLoggedIn ? 'moss' : 'ghost'} size="sm" onClick={() => { setOpen(false); onPortal() }} className="w-full">האזור האישי</Button>
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Enso, Chop, Icon, Button, Label, FormField } from './shared'
+import { Enso, Chop, Button, Label, FormField } from './shared'
+import { Icon } from './icons'
 import { getClient, getToken, saveAuth, authHeader } from '../auth'
 import type { ClientProfile } from '../auth'
 
