@@ -16,17 +16,17 @@ export class AuthController {
 
   @Post('admin')
   adminLogin(@Body(new JoiValidationPipe(adminLoginSchema)) dto: AdminLoginDto) {
-    return this.authService.adminLogin(dto.password);
+    return this.authService.adminLogin(dto);
   }
 
   @Post('request-otp')
   requestOtp(@Body(new JoiValidationPipe(requestOtpSchema)) dto: RequestOtpDto) {
-    return this.authService.requestOtp(dto.phone);
+    return this.authService.requestOtp(dto);
   }
 
   @Post('verify-otp')
   verifyOtp(@Body(new JoiValidationPipe(verifyOtpSchema)) dto: VerifyOtpDto) {
-    return this.authService.verifyOtp(dto.phone, dto.code, dto.name);
+    return this.authService.verifyOtp(dto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -35,6 +35,6 @@ export class AuthController {
     @CurrentUser() user: AuthUser,
     @Body(new JoiValidationPipe(updateNameSchema)) dto: UpdateNameDto,
   ) {
-    return this.authService.updateName(user.phone, dto.name);
+    return this.authService.updateName(user.phone, dto);
   }
 }
