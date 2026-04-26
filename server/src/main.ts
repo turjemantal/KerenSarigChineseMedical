@@ -8,6 +8,5 @@ async function bootstrap() {
   app.enableCors({ origin: config.clientUrl });
   app.setGlobalPrefix('api');
   await app.listen(config.port);
-  console.log(`Server running on port ${config.port}`);
 }
-bootstrap();
+void bootstrap();

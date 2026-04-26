@@ -19,7 +19,7 @@ export class AppointmentsManager {
 
   async book(dto: CreateAppointmentDto): Promise<AppointmentDocument> {
     const appt = await this.service.create(dto);
-    this.whatsapp.sendTemplate(
+    void this.whatsapp.sendTemplate(
       appt.phone,
       WHATSAPP_TEMPLATE.BOOKING_CONFIRMATION,
       bookingParams(appt.name, appt.date, appt.time),

@@ -217,8 +217,8 @@ describe('JoiValidationPipe', () => {
     const pipe = new JoiValidationPipe(createLeadSchema);
     try {
       pipe.transform({ name: 'X', phone: 'bad' });
-    } catch (e: any) {
-      expect(e.message).toContain(';');
+    } catch (e) {
+      expect((e as Error).message).toContain(';');
     }
   });
 });

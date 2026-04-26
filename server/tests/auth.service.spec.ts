@@ -141,7 +141,7 @@ describe('AuthService', () => {
       mockJwtService.sign.mockReturnValueOnce('new.jwt.token');
       const result = await service.updateName(validPhone, 'New Name');
       expect(result.token).toBe('new.jwt.token');
-      expect((result.client as any).name).toBe('New Name');
+      expect((result.client as { name: string }).name).toBe('New Name');
     });
 
     it('throws BadRequestException when client is not found', async () => {

@@ -3,6 +3,7 @@ import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
 import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
+import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
 
 const appt1 = { _id: 'a1', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00', status: 'pending' };
 const appt2 = { _id: 'a2', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '10:30', status: 'pending' };
@@ -41,14 +42,14 @@ describe('AppointmentsManager', () => {
   describe('book', () => {
     it('creates and returns a new appointment', async () => {
       mockService.create.mockResolvedValueOnce(appt1);
-      const dto: any = { phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00' };
+      const dto: CreateAppointmentDto = { phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00' };
       const result = await manager.book(dto);
       expect(mockService.create).toHaveBeenCalledWith(dto);
       expect(result).toMatchObject({ _id: 'a1', status: 'pending' });
     });
 
     it('passes all optional fields through to service', async () => {
-      const dto: any = { phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00', concern: 'כאב גב', notes: 'ללא גלוטן' };
+      const dto: CreateAppointmentDto = { phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00', concern: 'כאב גב', notes: 'ללא גלוטן' };
       mockService.create.mockResolvedValueOnce({ ...appt1, concern: 'כאב גב' });
       await manager.book(dto);
       expect(mockService.create).toHaveBeenCalledWith(expect.objectContaining({ concern: 'כאב גב', notes: 'ללא גלוטן' }));
