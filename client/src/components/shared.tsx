@@ -30,6 +30,7 @@ export const InkRule = ({ className = '', color = '#1C2A24', opacity = 0.15 }: {
 // ---------- Icons (placeholders — replace SVG content when icons are ready) ----------
 const iconStub = (s: number) => <span style={{ display: 'inline-block', width: s, height: s }} />
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const Icon = {
   Needle:    ({ s = 20 }: { s?: number }) => iconStub(s),
   Leaf:      ({ s = 20 }: { s?: number }) => iconStub(s),

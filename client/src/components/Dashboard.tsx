@@ -99,8 +99,6 @@ function hebFullDate(d: Date): string {
   return `${d.getDate()} ב${HEB_MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
 
-const APPOINTMENT_COLOR = '#4A6B5C'
-
 function timeToDecimal(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h + m / 60
@@ -419,7 +417,7 @@ function LeadDrawer({ lead, onClose, onStatusChange }: { lead: Lead; onClose: ()
       await fetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
       onStatusChange()
       onClose()
-    } catch { } finally { setSaving(false) }
+    } catch { /* ignore fetch errors, loading state cleared in finally */ } finally { setSaving(false) }
   }
 
   return (

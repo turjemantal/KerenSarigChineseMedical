@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Enso, Chop, Icon, Button, Avatar } from './shared'
+import { Enso, Icon, Button, Avatar } from './shared'
 import { AREAS } from '../data'
 
 export default function Landing({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
@@ -18,7 +18,7 @@ export default function Landing({ onBook, onContact, onPortal, isLoggedIn }: { o
 }
 
 // ---------- ניווט ----------
-function LandingNav({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
+function LandingNav({ onBook, onContact, onPortal, isLoggedIn: _isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
   const [open, setOpen] = useState(false)
   const links = [
     { label: 'אודות', href: '#about' },
