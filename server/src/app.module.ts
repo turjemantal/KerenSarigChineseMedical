@@ -6,11 +6,11 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { ClientsModule } from './clients/clients.module';
 import { AuthModule } from './auth/auth.module';
 import { WhatsappModule } from './integrations/whatsapp/whatsapp.module';
-import { MONGODB_URI_FALLBACK } from './common/constants/db.constants';
+import { config } from './config';
 
 @Module({
   imports: [
-    MongooseModule.forRoot(process.env.MONGODB_URI || MONGODB_URI_FALLBACK),
+    MongooseModule.forRoot(config.mongodbUri),
     ScheduleModule.forRoot(),
     WhatsappModule,
     LeadsModule,

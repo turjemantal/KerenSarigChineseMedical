@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { JWT_SECRET_FALLBACK } from '../common/constants/jwt.constants';
+import { config } from '../config';
 
 export interface JwtPayload {
   sub: string;
@@ -21,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || JWT_SECRET_FALLBACK,
+      secretOrKey: config.jwt.secret,
     });
   }
 

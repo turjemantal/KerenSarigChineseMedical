@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { WHATSAPP_API_BASE, WHATSAPP_API_VERSION, WHATSAPP_TEMPLATE_LANGUAGE } from './whatsapp.constants';
+import { WHATSAPP_TEMPLATE_LANGUAGE } from './whatsapp.constants';
+import { config } from '../../config';
 
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
   async sendTemplate(to: string, templateName: string, params: string[]): Promise<void> {
-    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const { accessToken, phoneNumberId, apiBase, apiVersion } = config.whatsapp;
 
     if (!accessToken || !phoneNumberId) {
       this.logger.warn(`[WhatsApp] ${templateName} → ${to} | params: ${params.join(', ')} (credentials not set)`);
@@ -15,7 +15,7 @@ export class WhatsappService {
     }
 
     const recipient = this.toInternational(to);
-    const url = `${WHATSAPP_API_BASE}/${WHATSAPP_API_VERSION}/${phoneNumberId}/messages`;
+    const url = `${apiBase}/${apiVersion}/${phoneNumberId}/messages`;
 
     const body = {
       messaging_product: 'whatsapp',

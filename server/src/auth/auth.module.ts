@@ -7,14 +7,14 @@ import { JwtStrategy } from './jwt.strategy';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { ClientsModule } from '../clients/clients.module';
-import { JWT_SECRET_FALLBACK, JWT_CLIENT_EXPIRY } from '../common/constants/jwt.constants';
+import { config } from '../config';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || JWT_SECRET_FALLBACK,
-      signOptions: { expiresIn: JWT_CLIENT_EXPIRY },
+      secret: config.jwt.secret,
+      signOptions: { expiresIn: config.jwt.clientExpiry },
     }),
     MongooseModule.forFeature([{ name: Otp.name, schema: OtpSchema }]),
     ClientsModule,

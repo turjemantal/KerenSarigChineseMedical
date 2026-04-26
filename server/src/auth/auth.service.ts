@@ -7,8 +7,8 @@ import { ClientsService } from '../clients/clients.service';
 import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
 import { WHATSAPP_TEMPLATE } from '../integrations/whatsapp/whatsapp.constants';
 import { OTP_CODE_MIN, OTP_CODE_RANGE } from '../common/constants/otp.constants';
-import { JWT_ADMIN_EXPIRY } from '../common/constants/jwt.constants';
 import { otpParams } from '../common/constants/messages.constants';
+import { config } from '../config';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -59,9 +59,9 @@ export class AuthService {
   }
 
   async adminLogin(dto: AdminLoginDto): Promise<{ token: string }> {
-    const expected = process.env.ADMIN_PASSWORD;
+    const expected = config.adminPassword;
     if (!expected || dto.password !== expected) throw new UnauthorizedException('סיסמה שגויה');
-    const token = this.jwtService.sign({ sub: 'admin', role: 'admin' }, { expiresIn: JWT_ADMIN_EXPIRY });
+    const token = this.jwtService.sign({ sub: 'admin', role: 'admin' }, { expiresIn: config.jwt.adminExpiry });
     return { token };
   }
 
