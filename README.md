@@ -18,6 +18,7 @@ A full-stack clinic management platform for Keren Sarig's Chinese Medicine pract
 - [Running Tests](#running-tests)
 - [CI/CD](#cicd)
 - [Docker](#docker)
+- [Deployment](#deployment)
 - [License](#license)
 
 ---
@@ -28,20 +29,22 @@ A full-stack clinic management platform for Keren Sarig's Chinese Medicine pract
 - **Lead capture** — contact form sends enquiries directly to the admin dashboard
 - **WhatsApp OTP login** — passwordless authentication via a one-time code sent to the client's phone
 - **Appointment booking** — real-time slot availability check before confirming a booking
-- **Client portal** — authenticated clients view and cancel their own appointments
+- **Client portal** — authenticated clients view and cancel their own upcoming appointments
 
 ### Admin
-- **Dashboard** — view and manage all leads and appointments
+- **Dashboard** — accessible at `/manager`; protected by a password-issued admin JWT
 - **Lead pipeline** — status lifecycle: `new → contacted → booked → closed`
-- **Appointment management** — approve, reschedule, or cancel with a single action
+- **Appointment management** — approve, update notes, or cancel with a single action
 - **Automated reminders** — cron job fires at 09:00 every morning and sends WhatsApp reminders for the following day's appointments
 
 ### Backend Architecture
 - **REST API** with a global `/api` prefix; all routes follow resource-oriented naming
-- **Event-driven side-effects** via a Manager layer — booking an appointment triggers a WhatsApp confirmation without coupling the controller to the messaging service
+- **Role-based auth** — client JWTs (30 d) and admin JWTs (12 h) carry distinct roles; `AdminAuthGuard` rejects non-admin tokens on all management routes
+- **Rate limiting** — global 60 req/min per IP via `@nestjs/throttler`; OTP send capped at 5/min, OTP verify and admin login at 10/min
+- **Event-driven side-effects** via a Manager layer — booking triggers a WhatsApp confirmation without coupling the controller to the messaging service
 - **Scheduled tasks** — NestJS `@Cron` decorator drives the daily reminder job independently of the request lifecycle
-- **JWT authentication** — stateless, phone-scoped tokens (30 d) for clients; short-lived admin tokens (12 h)
 - **Joi validation pipeline** — every incoming DTO is validated at the controller boundary before it reaches business logic
+- **Startup env validation** — server refuses to start if required environment variables are missing
 
 ---
 
@@ -51,8 +54,9 @@ A full-stack clinic management platform for Keren Sarig's Chinese Medicine pract
 |---|---|
 | **API server** | NestJS 10, Node.js 22 |
 | **Language** | TypeScript 5 (server), TypeScript 6 (client) |
-| **Database** | MongoDB 8 + Mongoose 8 |
+| **Database** | MongoDB 7 + Mongoose 8 |
 | **Auth** | Passport-JWT, @nestjs/jwt |
+| **Rate limiting** | @nestjs/throttler |
 | **Scheduling** | @nestjs/schedule (cron) |
 | **Messaging** | WhatsApp Business Cloud API (Meta, v21.0) |
 | **Validation** | Joi 18 + custom NestJS pipe |
@@ -71,27 +75,28 @@ A full-stack clinic management platform for Keren Sarig's Chinese Medicine pract
 kerenWebsite/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml              # Lint → test → build on every push/PR
-├── client/                     # React + Vite frontend
+│       └── ci.yml                 # Lint → test → build on every push/PR
+├── client/                        # React + Vite frontend
 │   ├── src/
-│   │   ├── components/         # Landing, BookingModal, Dashboard, …
-│   │   ├── auth.ts             # Token storage + API helpers
-│   │   └── App.tsx
-│   ├── nginx.conf              # Proxies /api → server:3001 in Docker
+│   │   ├── components/            # Landing, BookingModal, Dashboard, …
+│   │   ├── auth.ts                # Token storage + authHeader / adminAuthHeader helpers
+│   │   └── App.tsx                # React Router: / · /portal · /manager
+│   ├── nginx.conf                 # Proxies /api → server:3001 in Docker
 │   └── Dockerfile
-├── server/                     # NestJS backend
+├── server/                        # NestJS backend
 │   ├── src/
-│   │   ├── config/             # Centralised env-var config
-│   │   ├── auth/               # OTP flow, JWT strategy, guards, DTOs
-│   │   ├── appointments/       # Booking, availability, reminders
-│   │   ├── leads/              # Enquiry capture and pipeline
-│   │   ├── clients/            # Client profiles (findOrCreate)
+│   │   ├── config/                # Centralised env-var config + Joi startup validation
+│   │   ├── auth/                  # OTP flow, JWT strategy, JwtAuthGuard, AdminAuthGuard
+│   │   ├── appointments/          # Booking, availability, reminders
+│   │   ├── leads/                 # Enquiry capture and pipeline
+│   │   ├── clients/               # Client profiles (findOrCreate)
 │   │   └── integrations/
-│   │       └── whatsapp/       # WhatsApp Cloud API service
-│   ├── tests/                  # Jest unit tests
+│   │       └── whatsapp/          # WhatsApp Cloud API service (TEST/PROD modes)
+│   ├── tests/                     # Jest unit tests (96 tests)
 │   ├── .env.example
 │   └── Dockerfile
 ├── docker-compose.yml
+├── .env.example                   # Root-level template for docker-compose
 ├── LICENSE
 └── README.md
 ```
@@ -102,7 +107,7 @@ kerenWebsite/
 
 ### Prerequisites
 
-- **Node.js** ≥ 20 (LTS)
+- **Node.js** ≥ 22
 - **npm** ≥ 10
 - **MongoDB** running locally on port 27017 — or use Docker (see [Docker](#docker))
 
@@ -125,7 +130,6 @@ Open `server/.env` and fill in the required values (see [Environment Variables](
 ### 3. Install dependencies
 
 ```bash
-# From the repo root
 cd server && npm install
 cd ../client && npm install
 ```
@@ -147,28 +151,34 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
+Admin dashboard: [http://localhost:5173/manager](http://localhost:5173/manager)
 
 ---
 
 ## Environment Variables
 
-All configuration lives in `server/src/config/index.ts` which reads from `server/.env`. Copy the example file and fill in the blanks:
+All configuration is read at startup via `server/src/config/index.ts`. The server **will not start** if any required variable is missing. Copy the example and fill in the blanks:
 
 ```bash
 cp server/.env.example server/.env
 ```
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PORT` | No | `3001` | Port the NestJS server listens on |
-| `CLIENT_URL` | No | `http://localhost:5173` | CORS origin for the React client |
-| `MONGODB_URI` | No | `mongodb://localhost:27017/keren-clinic` | MongoDB connection string |
-| `JWT_SECRET` | **Yes** | — | Secret used to sign client JWTs |
-| `ADMIN_PASSWORD` | **Yes** | — | Password for the admin dashboard |
-| `WHATSAPP_ACCESS_TOKEN` | No | — | Meta system-user token (WhatsApp Cloud API) |
-| `WHATSAPP_PHONE_NUMBER_ID` | No | — | WhatsApp Business phone number ID |
+| Variable | Required | Description |
+|---|---|---|
+| `APP_ENV` | **Yes** | `TEST` (skip WhatsApp) or `PROD` (send real messages) |
+| `PORT` | No (default `3001`) | Port the NestJS server listens on |
+| `CLIENT_URL` | **Yes** | CORS origin — e.g. `https://yourdomain.com` |
+| `MONGODB_URI` | No (default local) | MongoDB connection string |
+| `JWT_SECRET` | **Yes** | Secret used to sign client JWTs (use a long random string) |
+| `ADMIN_PASSWORD` | **Yes** | Password for the `/manager` admin dashboard |
+| `WHATSAPP_ACCESS_TOKEN` | Yes in PROD | Meta system-user access token |
+| `WHATSAPP_PHONE_NUMBER_ID` | Yes in PROD | WhatsApp Business phone number ID |
+| `WHATSAPP_TEMPLATE_LANGUAGE` | Yes in PROD | Template language code — e.g. `he` |
+| `WHATSAPP_TEMPLATE_OTP` | Yes in PROD | Approved template name for OTP messages |
+| `WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION` | Yes in PROD | Approved template name for booking confirmations |
+| `WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER` | Yes in PROD | Approved template name for daily reminders |
 
-> WhatsApp credentials are optional in development. When absent the server logs the message to the console instead of sending it.
+> In `APP_ENV=TEST` mode the server logs WhatsApp messages to the console instead of sending them. All WhatsApp variables are optional in TEST mode and required in PROD mode — the Joi startup check enforces this.
 
 ---
 
@@ -176,147 +186,98 @@ cp server/.env.example server/.env
 
 Base URL: `http://localhost:3001/api`
 
+Auth notation:
+- **Client JWT** — `Authorization: Bearer <token>` issued by `POST /auth/verify-otp`
+- **Admin JWT** — `Authorization: Bearer <token>` issued by `POST /auth/admin`
+
 ### Authentication
 
-#### `POST /auth/request-otp`
+#### `POST /auth/request-otp` — rate-limited 5/min
 Send a one-time code to a client's WhatsApp number.
 
-**Body**
 ```json
 { "phone": "0501234567" }
 ```
 
-**Response** `200`
-```json
-{ "message": "OTP sent" }
-```
+Response `200`: `{ "message": "OTP sent" }`
 
 ---
 
-#### `POST /auth/verify-otp`
+#### `POST /auth/verify-otp` — rate-limited 10/min
 Verify the OTP and receive a JWT. Creates the client record on first login.
 
-**Body**
 ```json
 { "phone": "0501234567", "code": "123456", "name": "Dana Cohen" }
 ```
 
-**Response** `200`
+Response `200`:
 ```json
-{
-  "token": "<jwt>",
-  "client": { "_id": "…", "phone": "0501234567", "name": "Dana Cohen", "email": null }
-}
+{ "token": "<jwt>", "client": { "_id": "…", "phone": "0501234567", "name": "Dana Cohen" } }
 ```
 
 ---
 
-#### `PATCH /auth/me/name` — requires JWT
-
+#### `PATCH /auth/me/name` — requires Client JWT
 Update the authenticated client's display name and receive a refreshed token.
 
-**Headers** `Authorization: Bearer <token>`
-
-**Body**
 ```json
 { "name": "Dana Levi" }
 ```
 
-**Response** `200`
-```json
-{ "token": "<jwt>", "client": { … } }
-```
-
 ---
 
-#### `POST /auth/admin`
-Authenticate as admin and receive a short-lived token (12 h).
+#### `POST /auth/admin` — rate-limited 10/min
+Authenticate as admin and receive a short-lived admin JWT (12 h).
 
-**Body**
 ```json
 { "password": "<ADMIN_PASSWORD>" }
 ```
 
-**Response** `200`
-```json
-{ "token": "<jwt>" }
-```
+Response `200`: `{ "token": "<jwt>" }`
 
 ---
 
 ### Appointments
 
-#### `GET /appointments/availability/:date`
-Returns booked time slots for a given date (no auth required).
+#### `GET /appointments/availability/:date` — public
+Returns booked time slots for a given date.
 
-**Example** `GET /appointments/availability/2026-05-10`
+Response `200`: `["09:00", "11:30"]`
 
-**Response** `200`
+---
+
+#### `POST /appointments` — requires Client JWT
+Book an appointment. Fires a WhatsApp booking confirmation to the client.
+
 ```json
-["09:00", "11:30"]
+{ "date": "2026-05-10", "time": "10:00", "concern": "Back pain", "notes": "First visit" }
 ```
 
 ---
 
-#### `POST /appointments` — requires JWT
-
-Book an appointment. Sends a WhatsApp confirmation to the client.
-
-**Headers** `Authorization: Bearer <token>`
-
-**Body**
-```json
-{
-  "date": "2026-05-10",
-  "time": "10:00",
-  "treatment": "Acupuncture",
-  "concern": "Back pain",
-  "notes": "First visit"
-}
-```
-
-`name` and `phone` default to the authenticated client's values if omitted.
-
-**Response** `201`
-```json
-{
-  "_id": "…",
-  "phone": "0501234567",
-  "name": "Dana Cohen",
-  "date": "2026-05-10",
-  "time": "10:00",
-  "status": "pending",
-  "reminderSent": false,
-  "createdAt": "…"
-}
-```
-
----
-
-#### `GET /appointments/mine` — requires JWT
-
+#### `GET /appointments/mine` — requires Client JWT
 List all appointments belonging to the authenticated client.
 
-**Headers** `Authorization: Bearer <token>`
+---
 
-**Response** `200` — array of appointment objects.
+#### `PATCH /appointments/:id/cancel` — requires Client JWT
+Cancel the client's own appointment. Returns `403` if the caller is not the owner.
 
 ---
 
-#### `GET /appointments`
-List all appointments (admin use).
+#### `GET /appointments` — requires Admin JWT
+List all appointments.
 
 ---
 
-#### `GET /appointments/:id`
+#### `GET /appointments/:id` — requires Admin JWT
 Fetch a single appointment by ID.
 
 ---
 
-#### `PATCH /appointments/:id`
-Update status or notes (admin use).
+#### `PATCH /appointments/:id` — requires Admin JWT
+Update status or notes.
 
-**Body**
 ```json
 { "status": "scheduled", "notes": "Confirmed by phone" }
 ```
@@ -325,58 +286,47 @@ Update status or notes (admin use).
 
 ---
 
-#### `PATCH /appointments/:id/approve`
+#### `PATCH /appointments/:id/approve` — requires Admin JWT
 Shortcut to mark an appointment as `scheduled`.
 
 ---
 
-#### `PATCH /appointments/:id/cancel` — requires JWT
-
-Cancel the authenticated client's own appointment. Returns `403` if the caller is not the owner.
-
----
-
-#### `DELETE /appointments/:id`
-Hard-delete an appointment (admin use).
+#### `DELETE /appointments/:id` — requires Admin JWT
+Hard-delete an appointment.
 
 ---
 
 ### Leads
 
-#### `POST /leads`
-Submit a patient enquiry form (no auth required).
+#### `POST /leads` — public
+Submit a patient enquiry form.
 
-**Body**
 ```json
 {
   "name": "Oren Ben-David",
   "phone": "0521234567",
   "email": "oren@example.com",
-  "concern": "Chronic fatigue",
-  "treatment": "Acupuncture",
-  "preferredDate": "2026-05-15",
-  "preferredTime": "Morning"
+  "concern": "Chronic fatigue"
 }
 ```
 
-**Response** `201` — lead object with `"status": "new"`.
+Response `201` — lead object with `"status": "new"`.
 
 ---
 
-#### `GET /leads`
-List all leads (admin use).
+#### `GET /leads` — requires Admin JWT
+List all leads.
 
 ---
 
-#### `GET /leads/:id`
+#### `GET /leads/:id` — requires Admin JWT
 Fetch a single lead by ID.
 
 ---
 
-#### `PATCH /leads/:id`
+#### `PATCH /leads/:id` — requires Admin JWT
 Update lead status or notes.
 
-**Body**
 ```json
 { "status": "contacted", "notes": "Left a voicemail" }
 ```
@@ -385,14 +335,14 @@ Update lead status or notes.
 
 ---
 
-#### `DELETE /leads/:id`
+#### `DELETE /leads/:id` — requires Admin JWT
 Hard-delete a lead.
 
 ---
 
 ## Running Tests
 
-Tests live in `server/tests/` and cover authentication, appointments, leads, clients, and input validation.
+Tests live in `server/tests/` and cover authentication, appointments, leads, clients, WhatsApp service, and input validation (96 tests total).
 
 ```bash
 cd server
@@ -400,7 +350,7 @@ cd server
 # Single run
 npm test
 
-# Watch mode (re-runs on file save)
+# Watch mode
 npm run test:watch
 
 # Coverage report
@@ -410,10 +360,7 @@ npm run test:cov
 ### Linting
 
 ```bash
-# Server (NestJS / TypeScript)
 cd server && npm run lint
-
-# Client (React / TypeScript)
 cd client && npm run lint
 ```
 
@@ -421,14 +368,14 @@ cd client && npm run lint
 
 ## CI/CD
 
-Every push and pull request triggers the **GitHub Actions** workflow (`.github/workflows/ci.yml`).
+Every push and pull request triggers the GitHub Actions workflow (`.github/workflows/ci.yml`).
 
 | Job | Steps |
 |---|---|
 | **Server** | Install deps → Lint → Test → Build |
 | **Client** | Install deps → Lint → Build |
 
-Both jobs run in parallel on `ubuntu-latest` with **Node.js 20 LTS**.
+Both jobs run in parallel on `ubuntu-latest` with **Node.js 22**.
 
 ---
 
@@ -437,21 +384,49 @@ Both jobs run in parallel on `ubuntu-latest` with **Node.js 20 LTS**.
 Start the full stack (MongoDB + server + client) with a single command:
 
 ```bash
+cp .env.example .env   # fill in your values
 docker compose up --build
 ```
 
-| Service | Port | Description |
+| Service | Exposed port | Description |
 |---|---|---|
-| `mongo` | 27017 | MongoDB 7 with persistent volume |
-| `server` | 3001 | NestJS API |
-| `client` | 80 | React app served via Nginx |
+| `mongo` | none (internal only) | MongoDB 7 with persistent named volume |
+| `server` | 3001 (internal) | NestJS API |
+| `client` | **80** | React app served via Nginx; proxies `/api/*` to server |
 
-The client's Nginx configuration proxies all `/api/*` requests to the server container, so the frontend always talks to a single origin.
+The client's Nginx configuration proxies all `/api/*` requests to the server container, so the browser always talks to a single origin on port 80.
 
-To stop and remove containers:
+Data is stored in a named Docker volume (`mongo_data`) and survives container restarts and `docker compose down`. Only `docker compose down -v` removes the volume — never run that in production.
+
+---
+
+## Deployment
+
+The recommended setup is a single EC2 instance (e.g. `t3.small`) running Docker Compose.
 
 ```bash
-docker compose down
+# On the EC2 instance
+git clone https://github.com/turjemantal/KerenSarigChineseMedical.git
+cd KerenSarigChineseMedical
+cp .env.example .env   # fill in production values
+docker compose up -d --build
+```
+
+### Production checklist
+
+- [ ] `APP_ENV=PROD` in `.env`
+- [ ] Strong random `JWT_SECRET` — `openssl rand -base64 32`
+- [ ] Strong `ADMIN_PASSWORD` — `openssl rand -base64 16`
+- [ ] `CLIENT_URL` set to your public domain
+- [ ] WhatsApp templates approved in Meta Business Manager
+- [ ] EC2 termination protection enabled (protects the MongoDB volume)
+- [ ] Point your domain to the EC2 public IP and configure HTTPS (e.g. via Nginx + Certbot on the host, or a load balancer)
+
+To redeploy after a code change:
+
+```bash
+git pull
+docker compose up -d --build
 ```
 
 ---
