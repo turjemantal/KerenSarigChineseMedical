@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { WHATSAPP_TEMPLATE_LANGUAGE } from './whatsapp.constants';
 import { config } from '../../config';
 
 @Injectable()
@@ -7,9 +6,9 @@ export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
   async sendTemplate(to: string, templateName: string, params: string[]): Promise<void> {
-    const { accessToken, phoneNumberId, apiBase, apiVersion } = config.whatsapp;
+    const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
 
-    if (!accessToken || !phoneNumberId) {
+    if (!accessToken || !phoneNumberId || !templateLanguage) {
       this.logger.warn(`[WhatsApp] ${templateName} → ${to} | params: ${params.join(', ')} (credentials not set)`);
       return;
     }
@@ -17,17 +16,19 @@ export class WhatsappService {
     const recipient = this.toInternational(to);
     const url = `${apiBase}/${apiVersion}/${phoneNumberId}/messages`;
 
+    const template: Record<string, unknown> = {
+      name: templateName,
+      language: { code: templateLanguage },
+    };
+    if (params.length) {
+      template.components = [{ type: 'body', parameters: params.map(text => ({ type: 'text', text })) }];
+    }
+
     const body = {
       messaging_product: 'whatsapp',
       to: recipient,
       type: 'template',
-      template: {
-        name: templateName,
-        language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
-        components: params.length
-          ? [{ type: 'body', parameters: params.map(text => ({ type: 'text', text })) }]
-          : [],
-      },
+      template,
     };
 
     try {
@@ -40,9 +41,11 @@ export class WhatsappService {
         body: JSON.stringify(body),
       });
 
+      const responseText = await res.text();
       if (!res.ok) {
-        const err = await res.text();
-        this.logger.error(`[WhatsApp] Failed to send "${templateName}" to ${recipient}: ${err}`);
+        this.logger.error(`[WhatsApp] Failed to send "${templateName}" to ${recipient}: ${responseText}`);
+      } else {
+        this.logger.log(`[WhatsApp] Sent "${templateName}" to ${recipient}: ${responseText}`);
       }
     } catch (e) {
       this.logger.error(`[WhatsApp] Network error sending "${templateName}" to ${recipient}: ${e}`);

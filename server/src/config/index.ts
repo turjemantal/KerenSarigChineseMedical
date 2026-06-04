@@ -30,6 +30,19 @@ export const config = {
     },
     apiBase: 'https://graph.facebook.com',
     apiVersion: 'v21.0',
-    templateLanguage: 'he',
+    get templateLanguage(): string | undefined {
+      return process.env.WHATSAPP_TEMPLATE_LANGUAGE;
+    },
+    templates: {
+      get otp(): string | undefined {
+        return process.env.WHATSAPP_TEMPLATE_OTP;
+      },
+      get bookingConfirmation(): string | undefined {
+        return process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION;
+      },
+      get appointmentReminder(): string | undefined {
+        return process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER;
+      },
+    },
   },
 };

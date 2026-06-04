@@ -5,7 +5,6 @@ import { Model } from 'mongoose';
 import { Otp, OtpDocument } from './otp.schema';
 import { ClientsService } from '../clients/clients.service';
 import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
-import { WHATSAPP_TEMPLATE } from '../integrations/whatsapp/whatsapp.constants';
 import { OTP_CODE_MIN, OTP_CODE_RANGE } from '../common/constants/otp.constants';
 import { otpParams } from '../common/constants/messages.constants';
 import { config } from '../config';
@@ -27,7 +26,7 @@ export class AuthService {
     const code = Math.floor(OTP_CODE_MIN + Math.random() * OTP_CODE_RANGE).toString();
     await this.otpModel.deleteMany({ phone: dto.phone });
     await this.otpModel.create({ phone: dto.phone, code });
-    await this.whatsapp.sendTemplate(dto.phone, WHATSAPP_TEMPLATE.OTP, otpParams(code));
+    await this.whatsapp.sendTemplate(dto.phone, config.whatsapp.templates.otp, otpParams(code));
     return { message: 'OTP sent' };
   }
 

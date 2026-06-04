@@ -327,9 +327,6 @@ function Footer() {
                   {s.icon}
                 </a>
               ))}
-              <a href="mailto:karintip1@gmail.com" aria-label="אימייל" className="flex items-center justify-center hover:text-[#F5F1EA]" style={{ width: 40, height: 40, border: '1px solid rgba(245,241,234,0.2)', borderRadius: '50%' }}>
-                <Icon.Mail s={15} />
-              </a>
             </div>
           </div>
           <div className="md:col-span-3">

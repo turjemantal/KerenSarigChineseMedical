@@ -5,8 +5,8 @@ import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
-import { WHATSAPP_TEMPLATE } from '../integrations/whatsapp/whatsapp.constants';
 import { bookingParams, reminderParams } from '../common/constants/messages.constants';
+import { config } from '../config';
 
 @Injectable()
 export class AppointmentsManager {
@@ -21,7 +21,7 @@ export class AppointmentsManager {
     const appt = await this.service.create(dto);
     void this.whatsapp.sendTemplate(
       appt.phone,
-      WHATSAPP_TEMPLATE.BOOKING_CONFIRMATION,
+      config.whatsapp.templates.bookingConfirmation,
       bookingParams(appt.name, appt.date, appt.time),
     );
     return appt;
@@ -61,7 +61,7 @@ export class AppointmentsManager {
     for (const appt of appointments) {
       await this.whatsapp.sendTemplate(
         appt.phone,
-        WHATSAPP_TEMPLATE.APPOINTMENT_REMINDER,
+        config.whatsapp.templates.appointmentReminder,
         reminderParams(appt.time),
       );
       await this.service.markReminderSent(String(appt._id));
