@@ -1,4 +1,8 @@
 export const config = {
+  get isTest(): boolean {
+    return process.env.APP_ENV === 'TEST';
+  },
+
   get port(): number {
     return Number(process.env.PORT ?? '3001');
   },

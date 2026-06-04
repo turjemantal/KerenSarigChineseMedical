@@ -15,6 +15,9 @@ const validPhone = '0501234567';
 const mockOtp = { phone: validPhone, code: '123456', expiresAt: new Date(Date.now() + 60_000) };
 const mockClient = { _id: 'c1', phone: validPhone, name: 'Test User', email: null };
 
+beforeAll(() => { process.env.WHATSAPP_TEMPLATE_OTP = 'otp_code'; });
+afterAll(() => { delete process.env.WHATSAPP_TEMPLATE_OTP; });
+
 const mockOtpModel = {
   deleteMany: jest.fn(),
   create: jest.fn(),
@@ -70,6 +73,17 @@ describe('AuthService', () => {
       await service.requestOtp(dto);
       expect(mockOtpModel.deleteMany).toHaveBeenCalledTimes(2);
       expect(mockOtpModel.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends the OTP code via WhatsApp', async () => {
+      mockOtpModel.deleteMany.mockResolvedValueOnce({});
+      mockOtpModel.create.mockResolvedValueOnce(mockOtp);
+      await service.requestOtp({ phone: validPhone });
+      expect(mockWhatsappService.sendTemplate).toHaveBeenCalledWith(
+        validPhone,
+        expect.any(String),
+        expect.arrayContaining([expect.stringMatching(/^\d+$/)]),
+      );
     });
   });
 

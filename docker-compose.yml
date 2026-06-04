@@ -15,6 +15,7 @@ services:
     ports:
       - "3001:3001"
     environment:
+      APP_ENV: ${APP_ENV}
       MONGODB_URI: mongodb://mongo:27017/keren-clinic
       PORT: 3001
       CLIENT_URL: ${CLIENT_URL}

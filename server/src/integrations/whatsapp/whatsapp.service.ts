@@ -6,8 +6,12 @@ export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
   async sendTemplate(to: string, templateName: string, params: string[]): Promise<void> {
-    const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
+    if (config.isTest) {
+      this.logger.log(`[WhatsApp] TEST mode — skipping "${templateName}" to ${to}`);
+      return;
+    }
 
+    const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
     const recipient = this.toInternational(to);
     const url = `${apiBase}/${apiVersion}/${phoneNumberId}/messages`;
 
