@@ -8,8 +8,8 @@ export class WhatsappService {
   async sendTemplate(to: string, templateName: string, params: string[]): Promise<void> {
     const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
 
-    if (!accessToken || !phoneNumberId || !templateLanguage) {
-      this.logger.warn(`[WhatsApp] ${templateName} → ${to} | params: ${params.join(', ')} (credentials not set)`);
+    if (!accessToken) {
+      this.logger.warn(`[WhatsApp] Skipping — WHATSAPP_ACCESS_TOKEN not set`);
       return;
     }
 
@@ -45,7 +45,8 @@ export class WhatsappService {
       if (!res.ok) {
         this.logger.error(`[WhatsApp] Failed to send "${templateName}" to ${recipient}: ${responseText}`);
       } else {
-        this.logger.log(`[WhatsApp] Sent "${templateName}" to ${recipient}: ${responseText}`);
+        const messageId = JSON.parse(responseText)?.messages?.[0]?.id ?? 'unknown';
+        this.logger.log(`[WhatsApp] Sent "${templateName}" to ${recipient} (id=${messageId})`);
       }
     } catch (e) {
       this.logger.error(`[WhatsApp] Network error sending "${templateName}" to ${recipient}: ${e}`);

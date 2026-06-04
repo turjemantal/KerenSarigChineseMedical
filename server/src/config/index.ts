@@ -25,23 +25,23 @@ export const config = {
     get accessToken(): string | undefined {
       return process.env.WHATSAPP_ACCESS_TOKEN;
     },
-    get phoneNumberId(): string | undefined {
-      return process.env.WHATSAPP_PHONE_NUMBER_ID;
+    get phoneNumberId(): string {
+      return process.env.WHATSAPP_PHONE_NUMBER_ID!;
     },
     apiBase: 'https://graph.facebook.com',
     apiVersion: 'v21.0',
-    get templateLanguage(): string | undefined {
-      return process.env.WHATSAPP_TEMPLATE_LANGUAGE;
+    get templateLanguage(): string {
+      return process.env.WHATSAPP_TEMPLATE_LANGUAGE!;
     },
     templates: {
-      get otp(): string | undefined {
-        return process.env.WHATSAPP_TEMPLATE_OTP;
+      get otp(): string {
+        return process.env.WHATSAPP_TEMPLATE_OTP!;
       },
-      get bookingConfirmation(): string | undefined {
-        return process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION;
+      get bookingConfirmation(): string {
+        return process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },
-      get appointmentReminder(): string | undefined {
-        return process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER;
+      get appointmentReminder(): string {
+        return process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER!;
       },
     },
   },
