@@ -29,6 +29,7 @@ Thumbs.db
 
 # NestJS / TypeScript
 server/dist/
+*.tsbuildinfo
 
 # Test coverage
 coverage/
