@@ -8,11 +8,6 @@ export class WhatsappService {
   async sendTemplate(to: string, templateName: string, params: string[]): Promise<void> {
     const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
 
-    if (!accessToken) {
-      this.logger.warn(`[WhatsApp] Skipping — WHATSAPP_ACCESS_TOKEN not set`);
-      return;
-    }
-
     const recipient = this.toInternational(to);
     const url = `${apiBase}/${apiVersion}/${phoneNumberId}/messages`;
 

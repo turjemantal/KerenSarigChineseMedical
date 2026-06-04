@@ -58,8 +58,7 @@ export class AuthService {
   }
 
   async adminLogin(dto: AdminLoginDto): Promise<{ token: string }> {
-    const expected = config.adminPassword;
-    if (!expected || dto.password !== expected) throw new UnauthorizedException('סיסמה שגויה');
+    if (dto.password !== config.adminPassword) throw new UnauthorizedException('סיסמה שגויה');
     const token = this.jwtService.sign({ sub: 'admin', role: 'admin' }, { expiresIn: config.jwt.adminExpiry });
     return { token };
   }

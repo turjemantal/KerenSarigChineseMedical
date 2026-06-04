@@ -8,10 +8,10 @@ export const envSchema = Joi.object({
   JWT_SECRET: Joi.string().required(),
   ADMIN_PASSWORD: Joi.string().required(),
 
-  WHATSAPP_ACCESS_TOKEN: Joi.string().optional(),
-  WHATSAPP_PHONE_NUMBER_ID: Joi.string().when('WHATSAPP_ACCESS_TOKEN', { is: Joi.exist(), then: Joi.required() }),
-  WHATSAPP_TEMPLATE_LANGUAGE: Joi.string().when('WHATSAPP_ACCESS_TOKEN', { is: Joi.exist(), then: Joi.required() }),
-  WHATSAPP_TEMPLATE_OTP: Joi.string().when('WHATSAPP_ACCESS_TOKEN', { is: Joi.exist(), then: Joi.required() }),
-  WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION: Joi.string().when('WHATSAPP_ACCESS_TOKEN', { is: Joi.exist(), then: Joi.required() }),
-  WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER: Joi.string().when('WHATSAPP_ACCESS_TOKEN', { is: Joi.exist(), then: Joi.required() }),
+  WHATSAPP_ACCESS_TOKEN: Joi.string().required(),
+  WHATSAPP_PHONE_NUMBER_ID: Joi.string().required(),
+  WHATSAPP_TEMPLATE_LANGUAGE: Joi.string().required(),
+  WHATSAPP_TEMPLATE_OTP: Joi.string().required(),
+  WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION: Joi.string().required(),
+  WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER: Joi.string().required(),
 }).options({ allowUnknown: true });

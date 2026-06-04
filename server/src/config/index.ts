@@ -11,19 +11,19 @@ export const config = {
 
   jwt: {
     get secret(): string {
-      return process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
+      return process.env.JWT_SECRET!;
     },
     clientExpiry: '30d' as const,
     adminExpiry: '12h' as const,
   },
 
-  get adminPassword(): string | undefined {
-    return process.env.ADMIN_PASSWORD;
+  get adminPassword(): string {
+    return process.env.ADMIN_PASSWORD!;
   },
 
   whatsapp: {
-    get accessToken(): string | undefined {
-      return process.env.WHATSAPP_ACCESS_TOKEN;
+    get accessToken(): string {
+      return process.env.WHATSAPP_ACCESS_TOKEN!;
     },
     get phoneNumberId(): string {
       return process.env.WHATSAPP_PHONE_NUMBER_ID!;
