@@ -381,12 +381,20 @@ Both jobs run in parallel on `ubuntu-latest` with **Node.js 22**.
 
 ## Docker
 
-Start the full stack (MongoDB + server + client) with a single command:
+A `Makefile` wraps the common Docker Compose commands so you don't need to type them out:
 
-```bash
-cp .env.example .env   # fill in your values
-docker compose up --build
-```
+| Command | Description |
+|---|---|
+| `make rebuild` | Full rebuild and start — use after every `git pull` |
+| `make rebuild-server` | Rebuild server only (faster when only backend changed) |
+| `make rebuild-client` | Rebuild client only (faster when only frontend changed) |
+| `make up` | Start all services without rebuilding |
+| `make down` | Stop all services |
+| `make restart` | Restart all services |
+| `make logs` | Tail logs for all services |
+| `make logs-server` | Tail server logs only |
+| `make logs-client` | Tail client logs only |
+| `make ps` | Show running containers |
 
 | Service | Exposed port | Description |
 |---|---|---|
@@ -409,7 +417,14 @@ The recommended setup is a single EC2 instance (e.g. `t3.small`) running Docker 
 git clone https://github.com/turjemantal/KerenSarigChineseMedical.git
 cd KerenSarigChineseMedical
 cp .env.example .env   # fill in production values
-docker compose up -d --build
+make rebuild
+```
+
+To redeploy after a code change:
+
+```bash
+git pull
+make rebuild
 ```
 
 ### Production checklist
@@ -421,13 +436,6 @@ docker compose up -d --build
 - [ ] WhatsApp templates approved in Meta Business Manager
 - [ ] EC2 termination protection enabled (protects the MongoDB volume)
 - [ ] Point your domain to the EC2 public IP and configure HTTPS (e.g. via Nginx + Certbot on the host, or a load balancer)
-
-To redeploy after a code change:
-
-```bash
-git pull
-docker compose up -d --build
-```
 
 ---
 
