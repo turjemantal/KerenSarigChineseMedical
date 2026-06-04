@@ -47,3 +47,8 @@ export function saveAdminToken(token: string) {
 export function clearAdminToken() {
   localStorage.removeItem(ADMIN_KEY)
 }
+
+export function adminAuthHeader(): Record<string, string> {
+  const token = getAdminToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}

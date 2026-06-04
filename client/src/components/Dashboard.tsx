@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Enso, Button, Avatar } from './shared'
 import { Icon } from './icons'
-import { clearAdminToken } from '../auth'
+import { clearAdminToken, adminAuthHeader } from '../auth'
 
 // ---------- Types ----------
 interface Lead {
@@ -37,7 +37,7 @@ function useLeads() {
   const refresh = () => {
     setLoading(true)
     setError(false)
-    fetch('/api/leads')
+    fetch('/api/leads', { headers: adminAuthHeader() })
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Lead[]> })
       .then(setLeads)
       .catch(() => setError(true))
@@ -54,7 +54,7 @@ function useAppointments() {
   const refresh = () => {
     setLoading(true)
     setError(false)
-    fetch('/api/appointments')
+    fetch('/api/appointments', { headers: adminAuthHeader() })
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Appointment[]> })
       .then(setAppointments)
       .catch(() => setError(true))
@@ -421,7 +421,7 @@ function LeadDrawer({ lead, onClose, onStatusChange }: { lead: Lead; onClose: ()
     setSaving(true)
     setSaveError(false)
     try {
-      const res = await fetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+      const res = await fetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeader() }, body: JSON.stringify({ status }) })
       if (!res.ok) throw new Error()
       onStatusChange()
       onClose()
@@ -600,7 +600,7 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
 
   const updateStatus = async (id: string, status: string) => {
-    const res = await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    const res = await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeader() }, body: JSON.stringify({ status }) })
     if (!res.ok) return
     onStatusChange()
     setSelected(null)
