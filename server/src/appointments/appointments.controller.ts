@@ -13,6 +13,7 @@ import { AppointmentsManager } from './appointments.manager';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
 import { createAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
@@ -32,6 +33,7 @@ export class AppointmentsController {
     return this.manager.book({ ...dto, phone: user.phone, name: dto.name || user.name || user.phone });
   }
 
+  @UseGuards(AdminAuthGuard)
   @Get()
   findAll() {
     return this.manager.getAll();
@@ -49,11 +51,13 @@ export class AppointmentsController {
     return this.manager.getAvailability(date);
   }
 
+  @UseGuards(AdminAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.manager.getById(id);
   }
 
+  @UseGuards(AdminAuthGuard)
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -62,6 +66,7 @@ export class AppointmentsController {
     return this.manager.update(id, dto);
   }
 
+  @UseGuards(AdminAuthGuard)
   @Patch(':id/approve')
   approve(@Param('id') id: string) {
     return this.manager.update(id, { status: AppointmentStatus.SCHEDULED });
@@ -75,6 +80,7 @@ export class AppointmentsController {
     return this.manager.update(id, { status: AppointmentStatus.CANCELLED });
   }
 
+  @UseGuards(AdminAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.manager.remove(id);

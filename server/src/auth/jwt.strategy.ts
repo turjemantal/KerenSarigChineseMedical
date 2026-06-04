@@ -5,14 +5,16 @@ import { config } from '../config';
 
 export interface JwtPayload {
   sub: string;
-  phone: string;
+  phone?: string;
   name?: string;
+  role?: string;
 }
 
 export interface AuthUser {
   clientId: string;
   phone: string;
   name?: string;
+  role?: string;
 }
 
 @Injectable()
@@ -26,6 +28,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload) {
-    return { clientId: payload.sub, phone: payload.phone, name: payload.name };
+    return { clientId: payload.sub, phone: payload.phone ?? '', name: payload.name, role: payload.role };
   }
 }

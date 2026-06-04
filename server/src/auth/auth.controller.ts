@@ -1,4 +1,5 @@
 import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -14,16 +15,19 @@ import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema }
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post('admin')
   adminLogin(@Body(new JoiValidationPipe(adminLoginSchema)) dto: AdminLoginDto) {
     return this.authService.adminLogin(dto);
   }
 
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('request-otp')
   requestOtp(@Body(new JoiValidationPipe(requestOtpSchema)) dto: RequestOtpDto) {
     return this.authService.requestOtp(dto);
   }
 
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post('verify-otp')
   verifyOtp(@Body(new JoiValidationPipe(verifyOtpSchema)) dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto);
