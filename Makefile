@@ -1,41 +1,44 @@
-.PHONY: up down restart rebuild rebuild-server rebuild-client logs ps
+.PHONY: up down rebuild logs deploy db-clean db-seed db-backup db-restore
 
-# Start all services (no rebuild)
+ECR=$(shell aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-central-1.amazonaws.com
+
+# ── Local ─────────────────────────────────────────────────────────────────────
+
 up:
 	docker compose up -d
 
-# Stop all services
 down:
 	docker compose down
 
-# Restart all services
-restart:
-	docker compose restart
-
-# Full rebuild and start (use after git pull)
 rebuild:
 	docker compose up -d --build
 
-# Rebuild and restart server only
-rebuild-server:
-	docker compose up -d --build server
-
-# Rebuild and restart client only
-rebuild-client:
-	docker compose up -d --build client
-
-# Follow logs for all services
 logs:
 	docker compose logs -f
 
-# Follow logs for server only
-logs-server:
-	docker compose logs -f server
+# ── Deploy to ECR + update EC2 ────────────────────────────────────────────────
 
-# Follow logs for client only
-logs-client:
-	docker compose logs -f client
+# Build for linux/amd64 and push to ECR
+deploy:
+	aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin $(ECR)
+	docker buildx build --platform linux/amd64 -t $(ECR)/keren-server:latest --push ./server
+	docker buildx build --platform linux/amd64 -t $(ECR)/keren-client:latest --push ./client
 
-# Show running containers
-ps:
-	docker compose ps
+# Pull latest images and restart on EC2 — usage: make pull-prod EC2=ubuntu@<ip> KEY=~/.ssh/keren-clinic.pem
+pull-prod:
+	ssh -i $(KEY) $(EC2) "docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+db-clean:
+	@./scripts/clean-db.sh
+
+db-seed:
+	@./scripts/seed-db.sh
+
+db-backup:
+	@./scripts/backup-db.sh
+
+# Usage: make db-restore ARCHIVE=backups/.../keren-clinic.archive
+db-restore:
+	@./scripts/restore-db.sh $(ARCHIVE)

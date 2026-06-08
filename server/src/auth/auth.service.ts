@@ -1,12 +1,12 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Otp, OtpDocument } from './otp.schema';
 import { ClientsService } from '../clients/clients.service';
-import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
+import { MESSAGING_PROVIDER } from '../integrations/messaging/messaging.token';
+import { IMessagingProvider } from '../integrations/messaging/messaging-provider.interface';
 import { OTP_CODE_MIN, OTP_CODE_RANGE } from '../common/constants/otp.constants';
-import { otpParams } from '../common/constants/messages.constants';
 import { config } from '../config';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -19,14 +19,14 @@ export class AuthService {
     @InjectModel(Otp.name) private otpModel: Model<OtpDocument>,
     private readonly jwtService: JwtService,
     private readonly clientsService: ClientsService,
-    private readonly whatsapp: WhatsappService,
+    @Inject(MESSAGING_PROVIDER) private readonly messaging: IMessagingProvider,
   ) {}
 
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
     const code = Math.floor(OTP_CODE_MIN + Math.random() * OTP_CODE_RANGE).toString();
     await this.otpModel.deleteMany({ phone: dto.phone });
     await this.otpModel.create({ phone: dto.phone, code });
-    await this.whatsapp.sendTemplate(dto.phone, config.whatsapp.templates.otp, otpParams(code));
+    await this.messaging.sendOtp(dto.phone, code);
     return { message: 'OTP sent' };
   }
 

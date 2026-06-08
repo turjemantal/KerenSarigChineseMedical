@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { config } from '../../config';
+import { toInternational } from '../../common/utils/phone.utils';
 
 @Injectable()
 export class WhatsappService {
@@ -12,7 +13,7 @@ export class WhatsappService {
     }
 
     const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
-    const recipient = this.toInternational(to);
+    const recipient = toInternational(to);
     const url = `${apiBase}/${apiVersion}/${phoneNumberId}/messages`;
 
     const template: Record<string, unknown> = {
@@ -50,10 +51,5 @@ export class WhatsappService {
     } catch (e) {
       this.logger.error(`[WhatsApp] Network error sending "${templateName}" to ${recipient}: ${e}`);
     }
-  }
-
-  private toInternational(phone: string): string {
-    const digits = phone.replace(/\D/g, '');
-    return digits.startsWith('0') ? `972${digits.slice(1)}` : digits;
   }
 }

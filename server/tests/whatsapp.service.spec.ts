@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
+import { AppEnv } from '../src/common/enums/app-env.enum';
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -16,7 +17,7 @@ describe('WhatsappService', () => {
     jest.clearAllMocks();
     process.env = {
       ...originalEnv,
-      APP_ENV: 'PROD',
+      APP_ENV: AppEnv.Prod,
       WHATSAPP_ACCESS_TOKEN: 'test-token',
       WHATSAPP_PHONE_NUMBER_ID: '1234567890',
       WHATSAPP_TEMPLATE_LANGUAGE: 'he',
@@ -30,7 +31,7 @@ describe('WhatsappService', () => {
 
   describe('TEST mode', () => {
     it('skips sending and does not call fetch', async () => {
-      process.env.APP_ENV = 'TEST';
+      process.env.APP_ENV = AppEnv.Test;
       await service.sendTemplate('0501234567', 'otp_code', ['123456']);
       expect(mockFetch).not.toHaveBeenCalled();
     });

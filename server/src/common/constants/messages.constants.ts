@@ -1,10 +1,8 @@
-const HEB_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+import { formatHebrewDate } from '../utils/date.utils';
+import { CLINIC_NAME } from './defaults.constants';
+import { OTP_EXPIRY_MINUTES } from './otp.constants';
 
-function formatHebrewDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return `${day} ב${HEB_MONTHS[month - 1]} ${year}`;
-}
-
+// ─── WhatsApp template parameter builders ────────────────────────────────────
 // otp_code template: {{1}} = code
 export const otpParams = (code: string): string[] => [code];
 
@@ -14,3 +12,13 @@ export const bookingParams = (name: string, date: string, time: string): string[
 
 // appointment_reminder template: {{1}} = time
 export const reminderParams = (time: string): string[] => [time];
+
+// ─── SMS plain-text message builders ─────────────────────────────────────────
+export const smsOtpText = (code: string): string =>
+  `קוד האימות שלך הוא: ${code}. הקוד תקף ל-${OTP_EXPIRY_MINUTES} דקות.`;
+
+export const smsBookingText = (name: string, date: string, time: string): string =>
+  `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} אושר. ${CLINIC_NAME}`;
+
+export const smsReminderText = (time: string): string =>
+  `תזכורת: יש לך תור מחר בשעה ${time}. ${CLINIC_NAME}`;

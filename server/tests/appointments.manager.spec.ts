@@ -1,21 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
-import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
+import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
 
 const appt1 = { _id: 'a1', phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00', status: 'pending' };
 const appt2 = { _id: 'a2', phone: '0502222222', name: 'Bob', date: '2026-05-01', time: '10:30', status: 'pending' };
 
-beforeAll(() => {
-  process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION = 'booking_confirmation';
-  process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER = 'appointment_reminder';
-});
-afterAll(() => {
-  delete process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION;
-  delete process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER;
-});
 
 const mockService = {
   create: jest.fn(),
@@ -29,8 +21,9 @@ const mockService = {
   delete: jest.fn(),
 };
 
-const mockWhatsapp = {
-  sendTemplate: jest.fn().mockResolvedValue(undefined),
+const mockMessaging = {
+  sendBookingConfirmation: jest.fn().mockResolvedValue(undefined),
+  sendAppointmentReminder: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('AppointmentsManager', () => {
@@ -41,7 +34,7 @@ describe('AppointmentsManager', () => {
       providers: [
         AppointmentsManager,
         { provide: AppointmentsService, useValue: mockService },
-        { provide: WhatsappService, useValue: mockWhatsapp },
+        { provide: MESSAGING_PROVIDER, useValue: mockMessaging },
       ],
     }).compile();
     manager = module.get<AppointmentsManager>(AppointmentsManager);
@@ -64,15 +57,13 @@ describe('AppointmentsManager', () => {
       expect(mockService.create).toHaveBeenCalledWith(expect.objectContaining({ concern: 'כאב גב', notes: 'ללא גלוטן' }));
     });
 
-    it('sends a booking confirmation via WhatsApp', async () => {
+    it('sends a booking confirmation via messaging service', async () => {
       mockService.create.mockResolvedValueOnce(appt1);
       const dto: CreateAppointmentDto = { phone: '0501111111', name: 'Alice', date: '2026-05-01', time: '09:00' };
       await manager.book(dto);
       await new Promise(r => setTimeout(r, 0)); // flush void promise
-      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
-        appt1.phone,
-        expect.any(String),
-        expect.arrayContaining(['Alice', expect.stringContaining('מאי'), '09:00']),
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(
+        appt1.phone, appt1.name, appt1.date, appt1.time,
       );
     });
   });
@@ -84,9 +75,9 @@ describe('AppointmentsManager', () => {
 
       await manager.sendDailyReminders();
 
-      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledTimes(2);
-      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(appt1.phone, expect.any(String), ['09:00']);
-      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(appt2.phone, expect.any(String), ['10:30']);
+      expect(mockMessaging.sendAppointmentReminder).toHaveBeenCalledTimes(2);
+      expect(mockMessaging.sendAppointmentReminder).toHaveBeenCalledWith(appt1.phone, appt1.time);
+      expect(mockMessaging.sendAppointmentReminder).toHaveBeenCalledWith(appt2.phone, appt2.time);
     });
 
     it('marks each appointment as reminder sent', async () => {
@@ -105,7 +96,7 @@ describe('AppointmentsManager', () => {
 
       await manager.sendDailyReminders();
 
-      expect(mockWhatsapp.sendTemplate).not.toHaveBeenCalled();
+      expect(mockMessaging.sendAppointmentReminder).not.toHaveBeenCalled();
       expect(mockService.markReminderSent).not.toHaveBeenCalled();
     });
   });

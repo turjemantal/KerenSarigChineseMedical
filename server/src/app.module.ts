@@ -7,7 +7,7 @@ import { LeadsModule } from './leads/leads.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { ClientsModule } from './clients/clients.module';
 import { AuthModule } from './auth/auth.module';
-import { WhatsappModule } from './integrations/whatsapp/whatsapp.module';
+import { MessagingModule } from './integrations/messaging/messaging.module';
 import { config } from './config';
 
 @Module({
@@ -15,7 +15,7 @@ import { config } from './config';
     MongooseModule.forRoot(config.mongodbUri),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
-    WhatsappModule,
+    MessagingModule,
     LeadsModule,
     AppointmentsModule,
     ClientsModule,

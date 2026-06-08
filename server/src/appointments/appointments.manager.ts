@@ -1,12 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { WhatsappService } from '../integrations/whatsapp/whatsapp.service';
-import { bookingParams, reminderParams } from '../common/constants/messages.constants';
-import { config } from '../config';
+import { MESSAGING_PROVIDER } from '../integrations/messaging/messaging.token';
+import { IMessagingProvider } from '../integrations/messaging/messaging-provider.interface';
 
 @Injectable()
 export class AppointmentsManager {
@@ -14,16 +13,12 @@ export class AppointmentsManager {
 
   constructor(
     private readonly service: AppointmentsService,
-    private readonly whatsapp: WhatsappService,
+    @Inject(MESSAGING_PROVIDER) private readonly messaging: IMessagingProvider,
   ) {}
 
   async book(dto: CreateAppointmentDto): Promise<AppointmentDocument> {
     const appt = await this.service.create(dto);
-    void this.whatsapp.sendTemplate(
-      appt.phone,
-      config.whatsapp.templates.bookingConfirmation,
-      bookingParams(appt.name, appt.date, appt.time),
-    );
+    void this.messaging.sendBookingConfirmation(appt.phone, appt.name, appt.date, appt.time);
     return appt;
   }
 
@@ -59,11 +54,7 @@ export class AppointmentsManager {
     this.logger.log(`[Reminders] Sending ${appointments.length} reminder(s) for ${tomorrow}`);
 
     for (const appt of appointments) {
-      await this.whatsapp.sendTemplate(
-        appt.phone,
-        config.whatsapp.templates.appointmentReminder,
-        reminderParams(appt.time),
-      );
+      await this.messaging.sendAppointmentReminder(appt.phone, appt.time);
       await this.service.markReminderSent(String(appt._id));
     }
   }

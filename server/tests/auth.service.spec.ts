@@ -5,7 +5,7 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from '../src/auth/auth.service';
 import { Otp } from '../src/auth/otp.schema';
 import { ClientsService } from '../src/clients/clients.service';
-import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
+import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { RequestOtpDto } from '../src/auth/dto/request-otp.dto';
 import { VerifyOtpDto } from '../src/auth/dto/verify-otp.dto';
 import { AdminLoginDto } from '../src/auth/dto/admin-login.dto';
@@ -15,8 +15,6 @@ const validPhone = '0501234567';
 const mockOtp = { phone: validPhone, code: '123456', expiresAt: new Date(Date.now() + 60_000) };
 const mockClient = { _id: 'c1', phone: validPhone, name: 'Test User', email: null };
 
-beforeAll(() => { process.env.WHATSAPP_TEMPLATE_OTP = 'otp_code'; });
-afterAll(() => { delete process.env.WHATSAPP_TEMPLATE_OTP; });
 
 const mockOtpModel = {
   deleteMany: jest.fn(),
@@ -33,8 +31,8 @@ const mockJwtService = {
   sign: jest.fn(),
 };
 
-const mockWhatsappService = {
-  sendTemplate: jest.fn().mockResolvedValue(undefined),
+const mockMessagingService = {
+  sendOtp: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('AuthService', () => {
@@ -47,7 +45,7 @@ describe('AuthService', () => {
         { provide: getModelToken(Otp.name), useValue: mockOtpModel },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ClientsService, useValue: mockClientsService },
-        { provide: WhatsappService, useValue: mockWhatsappService },
+        { provide: MESSAGING_PROVIDER, useValue: mockMessagingService },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -75,14 +73,13 @@ describe('AuthService', () => {
       expect(mockOtpModel.create).toHaveBeenCalledTimes(2);
     });
 
-    it('sends the OTP code via WhatsApp', async () => {
+    it('sends the OTP code via messaging service', async () => {
       mockOtpModel.deleteMany.mockResolvedValueOnce({});
       mockOtpModel.create.mockResolvedValueOnce(mockOtp);
       await service.requestOtp({ phone: validPhone });
-      expect(mockWhatsappService.sendTemplate).toHaveBeenCalledWith(
+      expect(mockMessagingService.sendOtp).toHaveBeenCalledWith(
         validPhone,
-        expect.any(String),
-        expect.arrayContaining([expect.stringMatching(/^\d+$/)]),
+        expect.stringMatching(/^\d+$/),
       );
     });
   });

@@ -1,0 +1,18 @@
+services:
+  server:
+    image: ${ECR_SERVER_IMAGE}
+    container_name: keren-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+
+  client:
+    image: ${ECR_CLIENT_IMAGE}
+    container_name: keren-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server

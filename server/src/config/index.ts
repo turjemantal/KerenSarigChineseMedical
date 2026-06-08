@@ -1,6 +1,9 @@
+import { AppEnv } from '../common/enums/app-env.enum';
+import { MessagingProvider } from '../common/enums/messaging-provider.enum';
+
 export const config = {
   get isTest(): boolean {
-    return process.env.APP_ENV === 'TEST';
+    return process.env.APP_ENV === AppEnv.Test;
   },
 
   get port(): number {
@@ -25,6 +28,24 @@ export const config = {
     return process.env.ADMIN_PASSWORD!;
   },
 
+  messaging: {
+    get provider(): MessagingProvider {
+      return (process.env.MESSAGING_PROVIDER ?? MessagingProvider.Whatsapp) as MessagingProvider;
+    },
+  },
+
+  twilio: {
+    get accountSid(): string {
+      return process.env.TWILIO_ACCOUNT_SID!;
+    },
+    get authToken(): string {
+      return process.env.TWILIO_AUTH_TOKEN!;
+    },
+    get fromNumber(): string {
+      return process.env.TWILIO_FROM_NUMBER!;
+    },
+  },
+
   whatsapp: {
     get accessToken(): string {
       return process.env.WHATSAPP_ACCESS_TOKEN!;
@@ -33,7 +54,9 @@ export const config = {
       return process.env.WHATSAPP_PHONE_NUMBER_ID!;
     },
     apiBase: 'https://graph.facebook.com',
-    apiVersion: 'v21.0',
+    get apiVersion(): string {
+      return process.env.WHATSAPP_API_VERSION ?? 'v21.0';
+    },
     get templateLanguage(): string {
       return process.env.WHATSAPP_TEMPLATE_LANGUAGE!;
     },
