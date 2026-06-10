@@ -1,6 +1,7 @@
 import * as Joi from 'joi';
 import { AppEnv } from '../common/enums/app-env.enum';
 import { MessagingProvider } from '../common/enums/messaging-provider.enum';
+import { TWILIO_ACCOUNT_SID_REGEX, TWILIO_API_KEY_SID_REGEX } from '../common/constants/validation.constants';
 
 const realEnvs = [AppEnv.Dev, AppEnv.Prod];
 
@@ -14,15 +15,19 @@ const requiredInRealEnv = Joi.when('APP_ENV', {
   otherwise: optionalStr,
 });
 
-const requiredForSms = Joi.when('APP_ENV', {
-  is: Joi.valid(...realEnvs),
-  then: Joi.when('MESSAGING_PROVIDER', {
-    is: MessagingProvider.Sms,
-    then: Joi.string().required(),
+// Required (with optional format check) only in DEV/PROD when MESSAGING_PROVIDER=sms
+const requiredForSmsMatching = (pattern?: RegExp) =>
+  Joi.when('APP_ENV', {
+    is: Joi.valid(...realEnvs),
+    then: Joi.when('MESSAGING_PROVIDER', {
+      is: MessagingProvider.Sms,
+      then: (pattern ? Joi.string().pattern(pattern) : Joi.string()).required(),
+      otherwise: optionalStr,
+    }),
     otherwise: optionalStr,
-  }),
-  otherwise: optionalStr,
-});
+  });
+
+const requiredForSms = requiredForSmsMatching();
 
 const requiredForWhatsapp = Joi.when('APP_ENV', {
   is: Joi.valid(...realEnvs),
@@ -46,9 +51,10 @@ export const envSchema = Joi.object({
 
   MESSAGING_PROVIDER: Joi.string().valid(...Object.values(MessagingProvider)).default(MessagingProvider.Whatsapp),
 
-  TWILIO_ACCOUNT_SID: requiredForSms,
-  TWILIO_AUTH_TOKEN:  requiredForSms,
-  TWILIO_FROM_NUMBER: requiredForSms,
+  TWILIO_ACCOUNT_SID:    requiredForSmsMatching(TWILIO_ACCOUNT_SID_REGEX),
+  TWILIO_API_KEY_SID:    requiredForSmsMatching(TWILIO_API_KEY_SID_REGEX),
+  TWILIO_API_KEY_SECRET: requiredForSms,
+  TWILIO_FROM_NUMBER:    requiredForSms,
 
   WHATSAPP_API_VERSION:                    optionalStr,
   WHATSAPP_ACCESS_TOKEN:                   requiredForWhatsapp,
@@ -56,5 +62,6 @@ export const envSchema = Joi.object({
   WHATSAPP_TEMPLATE_LANGUAGE:              requiredForWhatsapp,
   WHATSAPP_TEMPLATE_OTP:                   requiredForWhatsapp,
   WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION:  requiredForWhatsapp,
+  WHATSAPP_TEMPLATE_BOOKING_REQUEST:       optionalStr,
   WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER:  requiredForWhatsapp,
 }).options({ allowUnknown: true });

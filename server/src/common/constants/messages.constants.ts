@@ -10,6 +10,9 @@ export const otpParams = (code: string): string[] => [code];
 export const bookingParams = (name: string, date: string, time: string): string[] =>
   [name.split(' ')[0], formatHebrewDate(date), time];
 
+// booking_request template: {{1}} = first name, {{2}} = date, {{3}} = time
+export const bookingRequestParams = bookingParams;
+
 // appointment_reminder template: {{1}} = time
 export const reminderParams = (time: string): string[] => [time];
 
@@ -19,6 +22,9 @@ export const smsOtpText = (code: string): string =>
 
 export const smsBookingText = (name: string, date: string, time: string): string =>
   `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} אושר. ${CLINIC_NAME}`;
+
+export const smsBookingRequestText = (name: string, date: string, time: string): string =>
+  `שלום ${name.split(' ')[0]}, בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time} התקבלה וממתינה לאישור. נעדכן ברגע שהתור יאושר. ${CLINIC_NAME}`;
 
 export const smsReminderText = (time: string): string =>
   `תזכורת: יש לך תור מחר בשעה ${time}. ${CLINIC_NAME}`;

@@ -6,6 +6,7 @@ import ContactModal from './components/ContactModal'
 import Dashboard from './components/Dashboard'
 import ClientPortal from './components/ClientPortal'
 import AdminLogin from './components/AdminLogin'
+import { AccessibilityStatement, PrivacyPolicy } from './components/Legal'
 import { getToken, getAdminToken } from './auth'
 
 function PublicView() {
@@ -45,6 +46,16 @@ function PortalView() {
   return <ClientPortal onExit={() => navigate('/')} />
 }
 
+function AccessibilityView() {
+  const navigate = useNavigate()
+  return <AccessibilityStatement onBack={() => navigate('/')} />
+}
+
+function PrivacyView() {
+  const navigate = useNavigate()
+  return <PrivacyPolicy onBack={() => navigate('/')} />
+}
+
 export default function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', '#C4634A')
@@ -56,6 +67,8 @@ export default function App() {
         <Route path="/" element={<PublicView />} />
         <Route path="/manager" element={<ManagerView />} />
         <Route path="/portal" element={<PortalView />} />
+        <Route path="/accessibility" element={<AccessibilityView />} />
+        <Route path="/privacy" element={<PrivacyView />} />
       </Routes>
     </BrowserRouter>
   )

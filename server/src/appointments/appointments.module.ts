@@ -5,10 +5,12 @@ import { AppointmentsController } from './appointments.controller';
 import { AppointmentsManager } from './appointments.manager';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentsDao } from './appointments.dao';
+import { ScheduleBlocksModule } from '../schedule-blocks/schedule-blocks.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Appointment.name, schema: AppointmentSchema }]),
+    ScheduleBlocksModule,
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsManager, AppointmentsService, AppointmentsDao],

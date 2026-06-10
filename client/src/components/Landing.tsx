@@ -2,6 +2,24 @@ import { useState } from 'react'
 import { Enso, Button, Avatar } from './shared'
 import { Icon } from './icons'
 import { AREAS } from '../data'
+import { SOCIAL_LINKS, CLINIC_CONTACT } from '../constants'
+
+function SocialIconLink({ id, label, href, icon, size = 34, plain = false }: { id: string; label: string; href: string; icon: string; size?: number; plain?: boolean }) {
+  const Ico = (Icon as Record<string, React.ComponentType<{ s?: number }>>)[icon]
+  return (
+    <a key={id} href={href} target="_blank" rel="noopener" aria-label={label} title={label}
+      className="flex items-center justify-center transition-all duration-200 hover:text-[#C4634A] hover:scale-110"
+      style={{
+        width: size, height: size, color: '#4A6B5C',
+        border: plain ? 'none' : '1px solid rgba(28,42,36,0.15)',
+        borderRadius: '50%',
+      }}>
+      {Ico && <Ico s={plain ? size * 0.6 : size * 0.45} />}
+    </a>
+  )
+}
+
+const NavDivider = () => <span aria-hidden style={{ width: 1, height: 22, background: 'rgba(28,42,36,0.12)' }} />
 
 export default function Landing({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () => void; onContact: () => void; onPortal: () => void; isLoggedIn: boolean }) {
   return (
@@ -43,13 +61,24 @@ function LandingNav({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () =>
             <a key={l.href} href={l.href} className="text-[14.5px] hover:text-[#4A6B5C] transition-colors" style={{ color: '#1C2A24' }}>{l.label}</a>
           ))}
         </nav>
-        <div className="hidden md:flex items-center gap-3">
-          <a href="tel:+972509031503" className="text-[14px] flex items-center gap-2" style={{ color: '#4A6B5C', direction: 'ltr' }}>
-            <Icon.Phone s={14} /> 050-9031503
+        <div className="hidden md:flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {SOCIAL_LINKS.map(s => (
+              <SocialIconLink key={s.id} {...s} size={38} />
+            ))}
+          </div>
+          <NavDivider />
+          <a href={`tel:${CLINIC_CONTACT.phoneIntl}`}
+            className="text-[14px] flex items-center gap-2 transition-colors hover:text-[#1C2A24]"
+            style={{ color: '#4A6B5C', direction: 'ltr', whiteSpace: 'nowrap' }}>
+            <Icon.Phone s={14} /> {CLINIC_CONTACT.phone}
           </a>
-          <Button variant={isLoggedIn ? 'moss' : 'ghost'} size="sm" onClick={onPortal}>האזור האישי</Button>
-          <Button variant="ghost" size="sm" onClick={onContact}>יצירת קשר</Button>
-          <Button variant="primary" size="sm" onClick={onBook}>קביעת תור</Button>
+          <NavDivider />
+          <div className="flex items-center gap-2">
+            <Button variant={isLoggedIn ? 'moss' : 'ghost'} size="sm" pill onClick={onPortal}>האזור האישי</Button>
+            <Button variant="ghost" size="sm" pill onClick={onContact}>יצירת קשר</Button>
+            <Button variant="primary" size="sm" pill onClick={onBook}>קביעת תור</Button>
+          </div>
         </div>
         <button className="md:hidden" onClick={() => setOpen(!open)} aria-label="תפריט"><Icon.Menu /></button>
       </div>
@@ -58,10 +87,15 @@ function LandingNav({ onBook, onContact, onPortal, isLoggedIn }: { onBook: () =>
           <div className="px-6 py-4 flex flex-col gap-4">
             {links.map(l => <a key={l.href} href={l.href} className="text-[15px]" onClick={() => setOpen(false)}>{l.label}</a>)}
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { setOpen(false); onContact() }} className="flex-1">יצירת קשר</Button>
-              <Button variant="primary" size="sm" onClick={() => { setOpen(false); onBook() }} className="flex-1">קביעת תור</Button>
+              <Button variant="ghost" size="sm" pill onClick={() => { setOpen(false); onContact() }} className="flex-1">יצירת קשר</Button>
+              <Button variant="primary" size="sm" pill onClick={() => { setOpen(false); onBook() }} className="flex-1">קביעת תור</Button>
             </div>
-            <Button variant={isLoggedIn ? 'moss' : 'ghost'} size="sm" onClick={() => { setOpen(false); onPortal() }} className="w-full">האזור האישי</Button>
+            <Button variant={isLoggedIn ? 'moss' : 'ghost'} size="sm" pill onClick={() => { setOpen(false); onPortal() }} className="w-full">האזור האישי</Button>
+            <div className="flex items-center justify-center gap-3 pt-2" style={{ borderTop: '1px solid rgba(28,42,36,0.08)' }}>
+              {SOCIAL_LINKS.map(s => (
+                <SocialIconLink key={s.id} {...s} size={40} />
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -92,8 +126,8 @@ function Hero({ onBook, onContact }: { onBook: () => void; onContact: () => void
               אני מאמינה שרק טיפול בראייה הוליסטית, הכולל התייחסות לגוף ולנפש, יחולל שינוי אמיתי.
             </p>
             <div className="flex flex-wrap items-center gap-4 mt-8">
-              <Button variant="primary" size="lg" onClick={onBook}>קביעת תור <Icon.ArrowLeft /></Button>
-              <Button variant="ghost" size="lg" onClick={onContact}>יצירת קשר</Button>
+              <Button variant="primary" size="lg" pill onClick={onBook}>קביעת תור <Icon.ArrowLeft /></Button>
+              <Button variant="ghost" size="lg" pill onClick={onContact}>יצירת קשר</Button>
             </div>
           </div>
           <div className="md:col-span-5 flex flex-wrap gap-x-10 gap-y-4 md:pb-2">
@@ -287,13 +321,13 @@ function ContactSection({ onBook, onContact }: { onBook: () => void; onContact: 
           <p className="mt-5 max-w-[560px]" style={{ fontSize: 16, lineHeight: 1.75, color: '#DCE4DF' }}>אשמח להקשיב, לענות על שאלות ולעזור להבין אם זה הטיפול המתאים עבורך.</p>
         </div>
         <div className="md:col-span-5 flex flex-col gap-3">
-          <Button variant="seal" size="lg" onClick={onBook} className="w-full">קביעת תור <Icon.ArrowLeft /></Button>
-          <Button variant="quiet" size="lg" onClick={onContact} className="w-full">יצירת קשר ראשוני <Icon.ArrowLeft /></Button>
-          <a href="tel:+972509031503" className="flex items-center justify-center gap-2 text-[14.5px] h-11" style={{ border: '1px solid rgba(245,241,234,0.3)', borderRadius: 2 }}>
-            <Icon.Phone s={14} /> <span style={{ direction: 'ltr' }}>050-9031503</span>
+          <Button variant="seal" size="lg" pill onClick={onBook} className="w-full">קביעת תור <Icon.ArrowLeft /></Button>
+          <Button variant="quiet" size="lg" pill onClick={onContact} className="w-full">יצירת קשר ראשוני <Icon.ArrowLeft /></Button>
+          <a href={`tel:${CLINIC_CONTACT.phoneIntl}`} className="flex items-center justify-center gap-2 text-[14.5px] h-11 transition-colors hover:border-[#F5F1EA]" style={{ border: '1px solid rgba(245,241,234,0.3)', borderRadius: 999 }}>
+            <Icon.Phone s={14} /> <span style={{ direction: 'ltr' }}>{CLINIC_CONTACT.phone}</span>
           </a>
-          <a href="https://wa.me/972509031503" target="_blank" rel="noopener" className="flex items-center justify-center gap-2 text-[14.5px] h-11" style={{ border: '1px solid rgba(245,241,234,0.3)', borderRadius: 2 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 20 L5.5 15.5 C 4.5 14, 4 12, 4 10 A 8 8 0 1 1 12 18 C 10 18, 8 17.5, 6.5 16.5 Z" /></svg>
+          <a href={SOCIAL_LINKS.find(s => s.id === 'whatsapp')!.href} target="_blank" rel="noopener" className="flex items-center justify-center gap-2 text-[14.5px] h-11 transition-colors hover:border-[#F5F1EA]" style={{ border: '1px solid rgba(245,241,234,0.3)', borderRadius: 999 }}>
+            <Icon.Whatsapp s={15} />
             וואטסאפ
           </a>
         </div>
@@ -318,23 +352,22 @@ function Footer() {
             </div>
             <p className="mt-6 max-w-[380px]" style={{ fontSize: 14.5, lineHeight: 1.75 }}>קליניקה רב-תחומית לדיקור ורפואה משלימה בשילוב מגע. ברמת השרון.</p>
             <div className="flex items-center gap-3 mt-6">
-              {[
-                { href: 'https://www.instagram.com/kerensarig11/', label: 'אינסטגרם', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" /></svg> },
-                { href: 'https://www.facebook.com/kerensarighealth', label: 'פייסבוק', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 8 L14 5 C 14 4, 14.5 3.5, 15.5 3.5 L18 3.5 L18 7 L15.5 7 L15.5 8 L18 8 L17.5 11 L15.5 11 L15.5 20 L13 20 L13 11 L11 11 L11 8 Z" fill="currentColor" /></svg> },
-                { href: 'https://wa.me/972509031503', label: 'וואטסאפ', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 20 L5.5 15.5 C 4.5 14, 4 12, 4 10 A 8 8 0 1 1 12 18 C 10 18, 8 17.5, 6.5 16.5 Z" /></svg> },
-              ].map(s => (
-                <a key={s.href} href={s.href} target="_blank" rel="noopener" aria-label={s.label} className="flex items-center justify-center hover:text-[#F5F1EA]" style={{ width: 40, height: 40, border: '1px solid rgba(245,241,234,0.2)', borderRadius: '50%' }}>
-                  {s.icon}
-                </a>
-              ))}
+              {SOCIAL_LINKS.map(s => {
+                const Ico = (Icon as Record<string, React.ComponentType<{ s?: number }>>)[s.icon]
+                return (
+                  <a key={s.id} href={s.href} target="_blank" rel="noopener" aria-label={s.label} className="flex items-center justify-center hover:text-[#F5F1EA]" style={{ width: 40, height: 40, border: '1px solid rgba(245,241,234,0.2)', borderRadius: '50%' }}>
+                    {Ico && <Ico s={16} />}
+                  </a>
+                )
+              })}
             </div>
           </div>
           <div className="md:col-span-3">
             <div style={{ fontSize: 11.5, letterSpacing: '0.18em', color: '#B8C5B8' }}>יצירת קשר</div>
             <div className="mt-4" style={{ fontSize: 14.5, lineHeight: 1.7 }}>
-              <div>סוקולוב 40, רמת השרון, קומה 3</div>
-              <div className="mt-3 flex items-center gap-2"><Icon.Phone s={13} /> 050-9031503</div>
-              <div className="flex items-center gap-2"><Icon.Mail s={13} /> karintip1@gmail.com</div>
+              <div>{CLINIC_CONTACT.address}</div>
+              <div className="mt-3 flex items-center gap-2"><Icon.Phone s={13} /> {CLINIC_CONTACT.phone}</div>
+              <div className="flex items-center gap-2"><Icon.Mail s={13} /> {CLINIC_CONTACT.email}</div>
             </div>
           </div>
           <div className="md:col-span-4">
@@ -349,8 +382,8 @@ function Footer() {
         <div className="mt-14 pt-8 flex flex-wrap items-center justify-between gap-4" style={{ borderTop: '1px solid rgba(245,241,234,0.15)', fontSize: 12, color: '#B8C5B8' }}>
           <div>© 2026 קרן שריג · רפואה סינית · כל הזכויות שמורות</div>
           <div className="flex items-center gap-6">
-            <a href="#" className="hover:text-[#F5F1EA]">הצהרת נגישות</a>
-            <a href="#" className="hover:text-[#F5F1EA]">הצהרת פרטיות</a>
+            <a href="/accessibility" className="hover:text-[#F5F1EA]">הצהרת נגישות</a>
+            <a href="/privacy" className="hover:text-[#F5F1EA]">מדיניות פרטיות</a>
           </div>
         </div>
       </div>

@@ -3,13 +3,14 @@ import { Enso, Button, Avatar } from './shared'
 import { Icon } from './icons'
 import { getClient, getToken, clearAuth, authHeader, saveAuth } from '../auth'
 import type { ClientProfile } from '../auth'
+import { AppointmentStatus, APPOINTMENT_STATUS_LABELS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS } from '../constants'
 
 interface Appointment {
   _id: string
   treatment: string
   date: string
   time: string
-  status: 'pending' | 'scheduled' | 'completed' | 'cancelled' | 'noshow'
+  status: AppointmentStatus
   concern?: string
   notes?: string
 }
@@ -50,15 +51,16 @@ function isWithin24Hours(dateStr: string, time: string): boolean {
   return diff > 0 && diff < 24 * 60 * 60 * 1000
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'ממתין לאישור', scheduled: 'מאושר', completed: 'הושלם', cancelled: 'בוטל', noshow: 'לא הגעתי',
+const STATUS_LABEL: Record<AppointmentStatus, string> = {
+  ...APPOINTMENT_STATUS_LABELS,
+  [AppointmentStatus.NoShow]: 'לא הגעתי',
 }
-const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
-  pending:   { bg: '#FFF8E6', fg: '#7A5C00' },
-  scheduled: { bg: '#E8F0EB', fg: '#2A5C3F' },
-  completed: { bg: '#EBE4D6', fg: '#5C4A1E' },
-  cancelled: { bg: '#F0EAEA', fg: '#5C2A2A' },
-  noshow:    { bg: '#FAE8E4', fg: '#8B2A15' },
+const STATUS_COLOR: Record<AppointmentStatus, { bg: string; fg: string }> = {
+  [AppointmentStatus.Pending]:   { bg: '#FFF8E6', fg: '#7A5C00' },
+  [AppointmentStatus.Scheduled]: { bg: '#E8F0EB', fg: '#2A5C3F' },
+  [AppointmentStatus.Completed]: { bg: '#EBE4D6', fg: '#5C4A1E' },
+  [AppointmentStatus.Cancelled]: { bg: '#F0EAEA', fg: '#5C2A2A' },
+  [AppointmentStatus.NoShow]:    { bg: '#FAE8E4', fg: '#8B2A15' },
 }
 
 // ── Login flow for portal ──────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
 
   const sendOtp = async () => {
     const p = normalize(phone)
-    if (!/^05\d{8}$/.test(p)) { setError('אנא הזינו מספר טלפון ישראלי תקין (05X-XXXXXXX)'); return }
+    if (!PHONE_REGEX.test(p)) { setError(UI_ERRORS.INVALID_PHONE); return }
     setLoading(true); setError('')
     try {
       const res = await fetch('/api/auth/request-otp', {
@@ -82,7 +84,7 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
       })
       if (!res.ok) throw new Error()
       setPhase('otp')
-    } catch { setError('שגיאה בשליחת הקוד') } finally { setLoading(false) }
+    } catch { setError(UI_ERRORS.OTP_SEND_FAILED) } finally { setLoading(false) }
   }
 
   const verifyOtp = async () => {
@@ -92,11 +94,11 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalize(phone), code: otp }),
       })
-      if (!res.ok) { setError('הקוד שגוי, נסו שוב'); return }
+      if (!res.ok) { setError(UI_ERRORS.OTP_WRONG); return }
       const { token, client } = await res.json()
       saveAuth(token, client)
       onLogin(client)
-    } catch { setError('שגיאה, נסו שוב') } finally { setLoading(false) }
+    } catch { setError(UI_ERRORS.GENERIC) } finally { setLoading(false) }
   }
 
   return (
@@ -120,7 +122,7 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
                 style={{ direction: 'ltr', textAlign: 'right', fontSize: 18 }}
                 onKeyDown={e => e.key === 'Enter' && sendOtp()} />
               {error && <div className="text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
-              <Button variant="primary" onClick={sendOtp} disabled={loading} className="w-full">
+              <Button variant="primary" pill onClick={sendOtp} disabled={loading} className="w-full">
                 {loading ? 'שולח…' : 'שליחת קוד'} <Icon.ArrowLeft />
               </Button>
             </div>
@@ -137,7 +139,7 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
                 style={{ direction: 'ltr', textAlign: 'center', fontSize: 28, letterSpacing: '0.4em' }}
                 onKeyDown={e => e.key === 'Enter' && verifyOtp()} />
               {error && <div className="text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
-              <Button variant="primary" onClick={verifyOtp} disabled={loading || otp.length < 6} className="w-full">
+              <Button variant="primary" pill onClick={verifyOtp} disabled={loading || otp.length < 6} className="w-full">
                 {loading ? 'בודק…' : 'כניסה'} <Icon.ArrowLeft />
               </Button>
               <button onClick={() => { setPhase('phone'); setOtp(''); setError('') }} className="w-full text-center text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>
@@ -172,7 +174,7 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
     return <PortalLogin onLogin={c => setClient(c)} />
   }
 
-  const upcoming = appointments.filter(a => (a.status === 'scheduled' || a.status === 'pending') && isUpcoming(a.date, a.time))
+  const upcoming = appointments.filter(a => (a.status === AppointmentStatus.Scheduled || a.status === AppointmentStatus.Pending) && isUpcoming(a.date, a.time))
   const past = appointments.filter(a => !upcoming.includes(a))
 
   return (
@@ -191,7 +193,7 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
             <Avatar name={client.name || client.phone} size={32} />
             <span style={{ fontSize: 13.5 }}>{client.name || client.phone}</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>יציאה</Button>
+          <Button variant="ghost" size="sm" pill onClick={handleLogout}>יציאה</Button>
           <button onClick={onExit} className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>← לאתר</button>
         </div>
       </header>
@@ -252,7 +254,7 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
 
 function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; onCancel?: () => void; showCancel?: boolean }) {
   const [cancelPhase, setCancelPhase] = useState<'idle' | 'confirm' | 'warning'>('idle')
-  const s = STATUS_COLOR[appt.status] || STATUS_COLOR.scheduled
+  const s = STATUS_COLOR[appt.status] || STATUS_COLOR[AppointmentStatus.Scheduled]
 
   return (
     <div className="p-5" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
@@ -267,7 +269,7 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
           <div className="mt-1 flex items-center gap-2" style={{ fontSize: 13.5, color: '#4A6B5C' }}>
             <Icon.Clock s={13} />
             <span style={{ direction: 'ltr' }}>{appt.time}</span>
-            <span>· 50 דקות</span>
+            <span>· {APPOINTMENT_DURATION_MINUTES} דקות</span>
           </div>
           {appt.concern && (
             <div className="mt-2" style={{ fontSize: 13, color: '#2A3D34' }}>״{appt.concern}״</div>
@@ -275,7 +277,7 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
         </div>
       </div>
 
-      {showCancel && (appt.status === 'scheduled' || appt.status === 'pending') && (
+      {showCancel && (appt.status === AppointmentStatus.Scheduled || appt.status === AppointmentStatus.Pending) && (
         <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(28,42,36,0.08)' }}>
           {cancelPhase === 'idle' && (
             <button onClick={() => setCancelPhase(isWithin24Hours(appt.date, appt.time) ? 'warning' : 'confirm')}
@@ -286,7 +288,7 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
           {cancelPhase === 'confirm' && (
             <div className="flex items-center gap-3">
               <span style={{ fontSize: 13, color: '#2A3D34' }}>לבטל את התור?</span>
-              <button onClick={() => { onCancel?.(); setCancelPhase('idle') }} className="text-[13px] px-3 h-8" style={{ background: '#C4634A', color: '#F5F1EA', borderRadius: 2 }}>כן, בטל</button>
+              <button onClick={() => { onCancel?.(); setCancelPhase('idle') }} className="text-[13px] px-3 h-8" style={{ background: '#C4634A', color: '#F5F1EA', borderRadius: 999, padding: '0 16px' }}>כן, בטל</button>
               <button onClick={() => setCancelPhase('idle')} className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>חזרה</button>
             </div>
           )}
@@ -296,7 +298,7 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
                 ביטול בפחות מ-24 שעות לפני הטיפול עשוי לגרור חיוב של 50% מעלות הטיפול.
               </div>
               <div className="flex items-center gap-3 mt-3">
-                <button onClick={() => { onCancel?.(); setCancelPhase('idle') }} className="text-[13px] px-3 h-8" style={{ background: '#C4634A', color: '#F5F1EA', borderRadius: 2 }}>כן, בטל בכל זאת</button>
+                <button onClick={() => { onCancel?.(); setCancelPhase('idle') }} className="text-[13px] px-3 h-8" style={{ background: '#C4634A', color: '#F5F1EA', borderRadius: 999, padding: '0 16px' }}>כן, בטל בכל זאת</button>
                 <button onClick={() => setCancelPhase('idle')} className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>חזרה</button>
               </div>
             </div>

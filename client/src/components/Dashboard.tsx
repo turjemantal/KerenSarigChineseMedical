@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Enso, Button, Avatar } from './shared'
+import { Enso, Button, Avatar, Label } from './shared'
 import { Icon } from './icons'
 import { clearAdminToken, adminAuthHeader } from '../auth'
+import {
+  AppointmentStatus,
+  APPOINTMENT_STATUS_LABELS,
+  LeadStatus,
+  LEAD_STATUS_LABELS,
+  APPOINTMENT_DURATION_MINUTES,
+  UI_ERRORS,
+} from '../constants'
+import type { ScheduleBlock } from '../constants'
 
 // ---------- Types ----------
 interface Lead {
@@ -10,7 +19,7 @@ interface Lead {
   phone: string
   concern: string
   treatment: string
-  status: 'new' | 'contacted' | 'booked' | 'closed'
+  status: LeadStatus
   source: string
   createdAt: string
   email?: string
@@ -24,7 +33,7 @@ interface Appointment {
   treatment: string
   date: string
   time: string
-  status: 'pending' | 'scheduled' | 'completed' | 'cancelled' | 'noshow'
+  status: AppointmentStatus
   concern?: string
   notes?: string
 }
@@ -64,7 +73,24 @@ function useAppointments() {
   return { appointments, loading, error, refresh }
 }
 
+function useScheduleBlocks() {
+  const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
+  const refresh = () => {
+    fetch('/api/schedule-blocks', { headers: adminAuthHeader() })
+      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<ScheduleBlock[]> })
+      .then(setBlocks)
+      .catch(() => {})
+  }
+  useEffect(refresh, [])
+  return { blocks, refresh }
+}
+
 // ---------- Helpers ----------
+async function approveAppointment(id: string): Promise<boolean> {
+  const res = await fetch(`/api/appointments/${id}/approve`, { method: 'PATCH', headers: adminAuthHeader() })
+  return res.ok
+}
+
 function localDateStr(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
@@ -109,7 +135,7 @@ function timeToDecimal(t: string): number {
   return h + m / 60
 }
 
-const DURATION_HOURS = 50 / 60
+const DURATION_HOURS = APPOINTMENT_DURATION_MINUTES / 60
 
 // ---------- Badge ----------
 function Badge({ children, tone }: { children: React.ReactNode; tone: string }) {
@@ -286,20 +312,59 @@ function Sidebar({ view, setView, onExit, open, onClose }: { view: string; setVi
 }
 
 // ---------- TodayView ----------
-function TodayView({ appointments, leads }: { appointments: Appointment[]; leads: Lead[] }) {
+function TodayView({ appointments, leads, onStatusChange }: { appointments: Appointment[]; leads: Lead[]; onStatusChange: () => void }) {
+  const [approvingId, setApprovingId] = useState<string | null>(null)
   const today = todayStr()
-  const todayAppts = appointments.filter(a => a.date === today && a.status !== 'cancelled').sort((a, b) => a.time.localeCompare(b.time))
-  const newLeads = leads.filter(l => l.status === 'new')
+  const todayAppts = appointments.filter(a => a.date === today && a.status !== AppointmentStatus.Cancelled).sort((a, b) => a.time.localeCompare(b.time))
+  const newLeads = leads.filter(l => l.status === LeadStatus.New)
+  const pendingAppts = appointments
+    .filter(a => a.status === AppointmentStatus.Pending && a.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+
+  const approve = async (id: string) => {
+    setApprovingId(id)
+    try {
+      if (await approveAppointment(id)) onStatusChange()
+    } finally {
+      setApprovingId(null)
+    }
+  }
 
   return (
     <div className="p-6 md:p-10">
       <div className="grid md:grid-cols-12 gap-6">
         <div className="md:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-4">
           <Kpi label="טיפולים היום" value={String(todayAppts.length)} sub="מתוזמנים" tone="moss" />
-          <Kpi label="ממתינים לאישור" value={String(appointments.filter(a => a.status === 'pending').length)} sub="דורשים אישור" tone="seal" />
+          <Kpi label="ממתינים לאישור" value={String(pendingAppts.length)} sub="דורשים אישור" tone="seal" />
           <Kpi label="פניות חדשות" value={String(newLeads.length)} sub="ממתינות לטיפול" />
-          <Kpi label="סה״כ תורים" value={String(appointments.filter(a => a.status === 'scheduled').length)} sub="מאושרים" />
+          <Kpi label="סה״כ תורים" value={String(appointments.filter(a => a.status === AppointmentStatus.Scheduled).length)} sub="מאושרים" />
         </div>
+
+        {pendingAppts.length > 0 && (
+          <div className="md:col-span-12">
+            <Panel title="תורים הממתינים לאישור" right={<Badge tone="pending">{pendingAppts.length} ממתינים</Badge>}>
+              <div>
+                {pendingAppts.map(a => (
+                  <div key={a._id} className="py-3.5 flex items-center gap-3 flex-wrap" style={{ borderBottom: '1px solid rgba(28,42,36,0.08)' }}>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Avatar name={a.name} size={34} />
+                      <div className="min-w-0">
+                        <div className="truncate" style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
+                        <div style={{ fontSize: 12.5, color: '#4A6B5C' }}>
+                          {new Date(a.date + 'T00:00:00').toLocaleDateString('he-IL')} · <span style={{ direction: 'ltr', display: 'inline-block' }}>{a.time}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {a.concern && <div className="hidden md:block flex-1 truncate" style={{ fontSize: 12.5, color: '#2A3D34' }}>״{a.concern}״</div>}
+                    <Button variant="moss" size="sm" onClick={() => void approve(a._id)} disabled={approvingId === a._id}>
+                      {approvingId === a._id ? 'מאשר…' : 'אישור התור'}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          </div>
+        )}
 
         <div className="md:col-span-7">
           <Panel title="לוח הטיפולים היום">
@@ -311,7 +376,7 @@ function TodayView({ appointments, leads }: { appointments: Appointment[]; leads
                   <div key={a._id} className="py-3.5 flex items-center gap-4" style={{ borderBottom: '1px solid rgba(28,42,36,0.08)' }}>
                     <div className="w-[72px] shrink-0" style={{ direction: 'ltr', textAlign: 'right' }}>
                       <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 19 }}>{a.time}</div>
-                      <div style={{ fontSize: 10.5, color: '#4A6B5C', letterSpacing: '0.05em' }}>50 דקות</div>
+                      <div style={{ fontSize: 10.5, color: '#4A6B5C', letterSpacing: '0.05em' }}>{APPOINTMENT_DURATION_MINUTES} דקות</div>
                     </div>
                     <div className="flex-1 min-w-0 flex items-center gap-3">
                       <Avatar name={a.name} size={34} />
@@ -320,7 +385,9 @@ function TodayView({ appointments, leads }: { appointments: Appointment[]; leads
                         <div className="truncate" style={{ fontSize: 12.5, color: '#4A6B5C' }}>{a.concern}</div>
                       </div>
                     </div>
-                    <Badge tone={a.status}>{({ pending: 'ממתין לאישור', scheduled: 'מאושר', completed: 'הושלם', cancelled: 'בוטל', noshow: 'לא הגיע' } as Record<string,string>)[a.status]}</Badge>
+                    {a.status === AppointmentStatus.Pending
+                      ? <Button variant="moss" size="sm" onClick={() => void approve(a._id)} disabled={approvingId === a._id}>{approvingId === a._id ? 'מאשר…' : 'אישור'}</Button>
+                      : <Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge>}
                   </div>
                 ))}
               </div>
@@ -354,26 +421,48 @@ function TodayView({ appointments, leads }: { appointments: Appointment[]; leads
 function LeadsView({ leads, onSelect }: { leads: Lead[]; onSelect: (l: Lead) => void }) {
   const [filter, setFilter] = useState('all')
   const filtered = filter === 'all' ? leads : leads.filter(l => l.status === filter)
-  const counts = {
-    all: leads.length,
-    new: leads.filter(l => l.status === 'new').length,
-    contacted: leads.filter(l => l.status === 'contacted').length,
-    booked: leads.filter(l => l.status === 'booked').length,
-    closed: leads.filter(l => l.status === 'closed').length,
-  }
+  const counts: Record<string, number> = { all: leads.length }
+  for (const s of Object.values(LeadStatus)) counts[s] = leads.filter(l => l.status === s).length
+  const filterTabs: [string, string][] = [
+    ['all', 'הכל'],
+    ...Object.values(LeadStatus).map(s => [s, LEAD_STATUS_LABELS[s]] as [string, string]),
+  ]
 
   return (
     <div className="p-6 md:p-10">
       <div className="flex flex-wrap items-center gap-2 mb-6">
-        {([['all','הכל'],['new','חדש'],['contacted','יצרתי קשר'],['booked','נקבע תור'],['closed','סגור']] as [string,string][]).map(([k, l]) => (
+        {filterTabs.map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
             className="text-[13px] px-4 h-9 flex items-center gap-2"
             style={{ background: filter === k ? '#1C2A24' : 'transparent', color: filter === k ? '#F5F1EA' : '#1C2A24', border: `1px solid ${filter === k ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2 }}>
-            {l} <span style={{ fontSize: 11, opacity: 0.7 }}>{counts[k as keyof typeof counts]}</span>
+            {l} <span style={{ fontSize: 11, opacity: 0.7 }}>{counts[k]}</span>
           </button>
         ))}
       </div>
-      <div style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+
+      {/* mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.map(l => (
+          <button key={l._id} onClick={() => onSelect(l)} className="w-full text-right p-4" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar name={l.name} size={32} />
+                <div className="min-w-0">
+                  <div className="truncate" style={{ fontSize: 14, fontWeight: 500 }}>{l.name}</div>
+                  <div style={{ fontSize: 12, color: '#4A6B5C', direction: 'ltr', textAlign: 'right' }}>{l.phone}</div>
+                </div>
+              </div>
+              <Badge tone={l.status}>{LEAD_STATUS_LABELS[l.status]}</Badge>
+            </div>
+            {l.concern && <p className="mt-2 truncate" style={{ fontSize: 12.5, color: '#2A3D34' }}>{l.concern}</p>}
+            <div className="mt-1" style={{ fontSize: 11.5, color: '#4A6B5C' }}>{new Date(l.createdAt).toLocaleDateString('he-IL')} · {l.source}</div>
+          </button>
+        ))}
+        {filtered.length === 0 && <div className="py-10 text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>אין פניות</div>}
+      </div>
+
+      {/* desktop table */}
+      <div className="hidden md:block" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -397,7 +486,7 @@ function LeadsView({ leads, onSelect }: { leads: Lead[]; onSelect: (l: Lead) => 
                   <td className="px-5 py-4 max-w-[280px]" style={{ fontSize: 13, color: '#2A3D34' }}><div className="truncate">{l.concern}</div></td>
                   <td className="px-5 py-4" style={{ fontSize: 12.5, color: '#4A6B5C' }}>{l.source}</td>
                   <td className="px-5 py-4" style={{ fontSize: 12.5, color: '#4A6B5C' }}>{new Date(l.createdAt).toLocaleDateString('he-IL')}</td>
-                  <td className="px-5 py-4"><Badge tone={l.status}>{({ new: 'חדש', contacted: 'בקשר', booked: 'נקבע', closed: 'סגור' })[l.status]}</Badge></td>
+                  <td className="px-5 py-4"><Badge tone={l.status}>{LEAD_STATUS_LABELS[l.status]}</Badge></td>
                   <td className="px-5 py-4" style={{ color: '#4A6B5C' }}><Icon.ArrowLeft s={14} /></td>
                 </tr>
               ))}
@@ -443,29 +532,42 @@ function LeadDrawer({ lead, onClose, onStatusChange }: { lead: Lead; onClose: ()
           </div>
         </div>
       </div>
-      <div className="mb-6"><Badge tone={lead.status}>{({ new: 'חדש', contacted: 'בקשר', booked: 'נקבע', closed: 'סגור' })[lead.status]}</Badge></div>
+      <div className="mb-6"><Badge tone={lead.status}>{LEAD_STATUS_LABELS[lead.status]}</Badge></div>
       <KV k="טלפון" v={<span style={{ direction: 'ltr', display: 'inline-block' }}>{lead.phone}</span>} icon="Phone" />
       {lead.email && <KV k="אימייל" v={lead.email} />}
       <KV k="תלונה עיקרית" v={lead.concern} multi />
       {lead.notes && <KV k="הערות" v={lead.notes} multi />}
       {saveError && (
-        <div className="mt-4" style={{ fontSize: 13, color: '#C4634A' }}>שגיאה בשמירה — נסו שוב</div>
+        <div className="mt-4" style={{ fontSize: 13, color: '#C4634A' }}>{UI_ERRORS.SAVE_FAILED}</div>
       )}
       <div className="mt-8 grid grid-cols-2 gap-3">
-        <Button variant="primary" onClick={() => void updateStatus('contacted')} disabled={saving}>סימון ״בקשר״</Button>
-        <Button variant="ghost" onClick={() => void updateStatus('booked')} disabled={saving}>קביעת תור</Button>
+        <Button variant="primary" onClick={() => void updateStatus(LeadStatus.Contacted)} disabled={saving}>סימון ״בקשר״</Button>
+        <Button variant="ghost" onClick={() => void updateStatus(LeadStatus.Booked)} disabled={saving}>קביעת תור</Button>
       </div>
       <div className="mt-4">
-        <Button variant="quiet" onClick={() => void updateStatus('closed')} disabled={saving} className="w-full">סגירת פנייה</Button>
+        <Button variant="quiet" onClick={() => void updateStatus(LeadStatus.Closed)} disabled={saving} className="w-full">סגירת פנייה</Button>
       </div>
     </Drawer>
   )
 }
 
 // ---------- CalendarView ----------
-function CalendarView({ appointments }: { appointments: Appointment[] }) {
+const dateInBlock = (dateStr: string, b: ScheduleBlock) => dateStr >= b.startDate && dateStr <= b.endDate
+
+const NAV_BUTTON_STYLE = { border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 } as const
+
+function Chevron({ dir, s = 12 }: { dir: 'prev' | 'next'; s?: number }) {
+  const path = dir === 'prev' ? 'M9 6 L15 12 L9 18' : 'M15 6 L9 12 L15 18'
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={path} /></svg>
+  )
+}
+
+function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: Appointment[]; blocks: ScheduleBlock[]; onBlocksChange: () => void }) {
   const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(new Date()))
+  const [mobileDay, setMobileDay] = useState(() => new Date())
   const [now, setNow] = useState(new Date())
+  const [blocksOpen, setBlocksOpen] = useState(false)
   const WORK_DAYS = 5
   const HOUR_H = 60
   const START_HOUR = 8
@@ -481,7 +583,7 @@ function CalendarView({ appointments }: { appointments: Appointment[] }) {
 
   const weekAppts = appointments.filter(a => {
     const d = new Date(a.date + 'T00:00:00')
-    return d >= weekStart && d < weekEnd && a.status !== 'cancelled'
+    return d >= weekStart && d < weekEnd && a.status !== AppointmentStatus.Cancelled
   })
 
   const prevWeek = () => setWeekStart(d => addDays(d, -7))
@@ -493,29 +595,96 @@ function CalendarView({ appointments }: { appointments: Appointment[] }) {
   const nowDecimal = now.getHours() + now.getMinutes() / 60
   const showNowLine = nowDecimal >= START_HOUR && nowDecimal < END_HOUR
 
-  const apptColor = (status: string) =>
-    status === 'pending' ? { bg: '#B8893B', border: 'rgba(184,137,59,0.6)' } : { bg: '#4A6B5C', border: 'rgba(74,107,92,0.6)' }
+  const apptColor = (status: AppointmentStatus) =>
+    status === AppointmentStatus.Pending ? { bg: '#B8893B', border: 'rgba(184,137,59,0.6)' } : { bg: '#4A6B5C', border: 'rgba(74,107,92,0.6)' }
+
+  // mobile day agenda
+  const mobileDateStr = formatDate(mobileDay)
+  const mobileDayAppts = appointments
+    .filter(a => a.date === mobileDateStr && a.status !== AppointmentStatus.Cancelled)
+    .sort((a, b) => a.time.localeCompare(b.time))
+  const mobileDayBlocks = blocks.filter(b => dateInBlock(mobileDateStr, b))
+  const mobileDayClosed = mobileDayBlocks.some(b => !b.startTime)
 
   return (
-    <div className="p-6 md:p-10">
+    <div className="p-4 md:p-10">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <button onClick={prevWeek} className="w-9 h-9 flex items-center justify-center hover:bg-[#EBE4D6]" style={{ border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 6 L15 12 L9 18" /></svg>
+        {/* week navigation — desktop */}
+        <div className="hidden md:flex items-center gap-3">
+          <button onClick={prevWeek} className="w-9 h-9 flex items-center justify-center hover:bg-[#EBE4D6]" style={NAV_BUTTON_STYLE} aria-label="שבוע קודם">
+            <Chevron dir="prev" />
           </button>
           <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 21 }}>{weekLabel}</div>
-          <button onClick={nextWeek} className="w-9 h-9 flex items-center justify-center hover:bg-[#EBE4D6]" style={{ border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 6 L9 12 L15 18" /></svg>
+          <button onClick={nextWeek} className="w-9 h-9 flex items-center justify-center hover:bg-[#EBE4D6]" style={NAV_BUTTON_STYLE} aria-label="שבוע הבא">
+            <Chevron dir="next" />
           </button>
-          <button onClick={goToday} className="h-9 px-3 text-[12px]" style={{ border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>היום</button>
+          <button onClick={goToday} className="h-9 px-3 text-[12px]" style={NAV_BUTTON_STYLE}>היום</button>
         </div>
-        <div className="flex items-center gap-4 text-[11.5px]" style={{ color: '#4A6B5C' }}>
-          <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: '#4A6B5C', borderRadius: 2, display: 'inline-block' }} />מאושר</span>
-          <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: '#B8893B', borderRadius: 2, display: 'inline-block' }} />ממתין לאישור</span>
+        {/* day navigation — mobile */}
+        <div className="flex md:hidden items-center justify-between w-full gap-2">
+          <button onClick={() => setMobileDay(d => addDays(d, -1))} className="w-11 h-11 flex items-center justify-center" style={NAV_BUTTON_STYLE} aria-label="יום קודם">
+            <Chevron dir="prev" s={14} />
+          </button>
+          <button onClick={() => setMobileDay(new Date())} className="flex-1 h-11 text-center" style={NAV_BUTTON_STYLE}>
+            <span style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 17, color: mobileDateStr === todayDateStr ? '#C4634A' : '#1C2A24' }}>
+              {hebDateLabel(mobileDay)} · {hebFullDate(mobileDay)}
+            </span>
+          </button>
+          <button onClick={() => setMobileDay(d => addDays(d, 1))} className="w-11 h-11 flex items-center justify-center" style={NAV_BUTTON_STYLE} aria-label="יום הבא">
+            <Chevron dir="next" s={14} />
+          </button>
+        </div>
+        <div className="flex items-center gap-4 flex-wrap w-full md:w-auto">
+          <div className="hidden md:flex items-center gap-4 text-[11.5px]" style={{ color: '#4A6B5C' }}>
+            <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: '#4A6B5C', borderRadius: 2, display: 'inline-block' }} />מאושר</span>
+            <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: '#B8893B', borderRadius: 2, display: 'inline-block' }} />ממתין לאישור</span>
+            <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: 'rgba(28,42,36,0.25)', borderRadius: 2, display: 'inline-block' }} />חסום</span>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => setBlocksOpen(true)} className="w-full md:w-auto">חסימת זמן / חופשה</Button>
         </div>
       </div>
 
-      <div style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+      {/* mobile day agenda */}
+      <div className="md:hidden space-y-3">
+        {mobileDayClosed && (
+          <div className="p-4 text-center" style={{ background: 'repeating-linear-gradient(135deg, rgba(28,42,36,0.06) 0 8px, rgba(28,42,36,0.12) 8px 16px)', borderRadius: 2, border: '1px solid rgba(28,42,36,0.1)' }}>
+            <div style={{ fontSize: 14.5, fontWeight: 500 }}>הקליניקה סגורה ביום זה</div>
+            {mobileDayBlocks.find(b => !b.startTime)?.reason && (
+              <div className="mt-1" style={{ fontSize: 12.5, color: '#4A6B5C' }}>{mobileDayBlocks.find(b => !b.startTime)!.reason}</div>
+            )}
+          </div>
+        )}
+        {mobileDayBlocks.filter(b => b.startTime).map(b => (
+          <div key={b._id} className="p-3 flex items-center gap-3" style={{ background: 'rgba(28,42,36,0.05)', border: '1px dashed rgba(28,42,36,0.2)', borderRadius: 2 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, direction: 'ltr' }}>{b.startTime}–{b.endTime}</span>
+            <span style={{ fontSize: 12.5, color: '#4A6B5C' }}>חסום{b.reason ? ` · ${b.reason}` : ''}</span>
+          </div>
+        ))}
+        {mobileDayAppts.map(a => {
+          const { bg } = apptColor(a.status)
+          return (
+            <div key={a._id} className="p-4 flex items-center gap-4" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRight: `4px solid ${bg}`, borderRadius: 2 }}>
+              <div className="shrink-0 text-center" style={{ minWidth: 52 }}>
+                <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 19, direction: 'ltr' }}>{a.time}</div>
+                <div style={{ fontSize: 10, color: '#4A6B5C' }}>{APPOINTMENT_DURATION_MINUTES} דק׳</div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate" style={{ fontSize: 14.5, fontWeight: 500 }}>{a.name}</div>
+                {a.concern && <div className="truncate" style={{ fontSize: 12.5, color: '#4A6B5C' }}>{a.concern}</div>}
+              </div>
+              <Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge>
+            </div>
+          )
+        })}
+        {!mobileDayClosed && mobileDayAppts.length === 0 && (
+          <div className="py-12 text-center" style={{ color: '#4A6B5C', fontSize: 13.5, background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+            אין תורים ביום זה
+          </div>
+        )}
+      </div>
+
+      {/* desktop week grid */}
+      <div className="hidden md:block" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
         <div className="overflow-x-auto">
           <div style={{ minWidth: 700 }}>
             {/* Day headers */}
@@ -552,11 +721,32 @@ function CalendarView({ appointments }: { appointments: Appointment[] }) {
                 const dateStr = formatDate(d)
                 const isToday = dateStr === todayDateStr
                 const dayAppts = weekAppts.filter(a => a.date === dateStr)
+                const dayBlocks = blocks.filter(b => dateInBlock(dateStr, b))
                 return (
                   <div key={dIdx} className="relative" style={{ borderRight: '1px solid rgba(28,42,36,0.06)', background: isToday ? 'rgba(196,99,74,0.025)' : 'transparent' }}>
                     {hours.map(h => (
                       <div key={h} style={{ height: HOUR_H, borderBottom: '1px solid rgba(28,42,36,0.05)' }} />
                     ))}
+                    {/* blocked time overlays */}
+                    {dayBlocks.map(b => {
+                      const fullDay = !b.startTime || !b.endTime
+                      const top = fullDay ? 0 : (timeToDecimal(b.startTime!) - START_HOUR) * HOUR_H
+                      const height = fullDay
+                        ? (END_HOUR - START_HOUR) * HOUR_H
+                        : (timeToDecimal(b.endTime!) - timeToDecimal(b.startTime!)) * HOUR_H
+                      return (
+                        <div key={b._id} className="absolute left-0 right-0 flex items-start justify-center"
+                          style={{
+                            top, height,
+                            background: 'repeating-linear-gradient(135deg, rgba(28,42,36,0.10) 0 8px, rgba(28,42,36,0.16) 8px 16px)',
+                            pointerEvents: 'none',
+                          }}>
+                          <span className="mt-2 px-2 py-0.5" style={{ fontSize: 10.5, color: '#1C2A24', background: 'rgba(245,241,234,0.85)', borderRadius: 2 }}>
+                            {fullDay ? 'סגור' : `חסום ${b.startTime}–${b.endTime}`}{b.reason ? ` · ${b.reason}` : ''}
+                          </span>
+                        </div>
+                      )
+                    })}
                     {/* Current time indicator */}
                     {isToday && showNowLine && (
                       <div className="absolute left-0 right-0 z-10 flex items-center" style={{ top: (nowDecimal - START_HOUR) * HOUR_H, pointerEvents: 'none' }}>
@@ -589,7 +779,153 @@ function CalendarView({ appointments }: { appointments: Appointment[] }) {
           </div>
         </div>
       </div>
+
+      {blocksOpen && (
+        <BlocksDrawer blocks={blocks} onClose={() => setBlocksOpen(false)} onChange={onBlocksChange} />
+      )}
     </div>
+  )
+}
+
+// ---------- BlocksDrawer (close hours / days / vacations) ----------
+const BlockKind = { Hours: 'hours', Day: 'day', Vacation: 'vacation' } as const
+type BlockKind = (typeof BlockKind)[keyof typeof BlockKind]
+
+const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
+  [BlockKind.Hours]: 'חסימת שעות',
+  [BlockKind.Day]: 'סגירת יום',
+  [BlockKind.Vacation]: 'חופשה',
+}
+
+const TIME_OPTIONS = (() => {
+  const out: string[] = []
+  for (let h = 8; h <= 20; h++) for (const m of [0, 15, 30, 45]) {
+    if (h === 20 && m > 0) break
+    out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+  }
+  return out
+})()
+
+function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; onClose: () => void; onChange: () => void }) {
+  const [kind, setKind] = useState<BlockKind>(BlockKind.Day)
+  const [startDate, setStartDate] = useState(todayStr())
+  const [endDate, setEndDate] = useState(todayStr())
+  const [startTime, setStartTime] = useState('09:00')
+  const [endTime, setEndTime] = useState('13:00')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async () => {
+    setError('')
+    const body: Record<string, string> = { startDate, reason: reason.trim() }
+    if (kind === BlockKind.Vacation) {
+      if (endDate < startDate) { setError(UI_ERRORS.END_DATE_BEFORE_START); return }
+      body.endDate = endDate
+    }
+    if (kind === BlockKind.Hours) {
+      if (endTime <= startTime) { setError(UI_ERRORS.END_TIME_BEFORE_START); return }
+      body.startTime = startTime
+      body.endTime = endTime
+    }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/schedule-blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+      onChange()
+    } catch {
+      setError(UI_ERRORS.SAVE_FAILED)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    const res = await fetch(`/api/schedule-blocks/${id}`, { method: 'DELETE', headers: adminAuthHeader() })
+    if (res.ok) onChange()
+  }
+
+  const describe = (b: ScheduleBlock) => {
+    const from = new Date(b.startDate + 'T00:00:00').toLocaleDateString('he-IL')
+    const to = new Date(b.endDate + 'T00:00:00').toLocaleDateString('he-IL')
+    if (b.startTime && b.endTime) return `${from} · ${b.startTime}–${b.endTime}`
+    return b.startDate === b.endDate ? `${from} · יום שלם` : `${from} – ${to} · חופשה`
+  }
+
+  const fieldStyle = { background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2, height: 40, padding: '0 10px', fontSize: 13.5, width: '100%' }
+
+  return (
+    <Drawer onClose={onClose} title="חסימת זמנים וחופשות">
+      <div className="flex flex-wrap gap-2 mb-6">
+        {Object.values(BlockKind).map(k => (
+          <button key={k} onClick={() => setKind(k)}
+            className="text-[13px] px-4 h-9"
+            style={{ background: kind === k ? '#1C2A24' : 'transparent', color: kind === k ? '#F5F1EA' : '#1C2A24', border: `1px solid ${kind === k ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2 }}>
+            {BLOCK_KIND_LABELS[k]}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <Label>{kind === BlockKind.Vacation ? 'מתאריך' : 'תאריך'}</Label>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="mt-2" style={fieldStyle} />
+        </div>
+        {kind === BlockKind.Vacation && (
+          <div>
+            <Label>עד תאריך</Label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="mt-2" style={fieldStyle} />
+          </div>
+        )}
+        {kind === BlockKind.Hours && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>משעה</Label>
+              <select value={startTime} onChange={e => setStartTime(e.target.value)} className="mt-2" style={fieldStyle}>
+                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>עד שעה</Label>
+              <select value={endTime} onChange={e => setEndTime(e.target.value)} className="mt-2" style={fieldStyle}>
+                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+        <div>
+          <Label>סיבה (אופציונלי)</Label>
+          <input value={reason} onChange={e => setReason(e.target.value)} placeholder="למשל: חופשה, השתלמות…" className="mt-2" style={fieldStyle} />
+        </div>
+        {error && <div style={{ fontSize: 13, color: '#C4634A' }}>{error}</div>}
+        <Button variant="primary" onClick={() => void submit()} disabled={saving} className="w-full">
+          {saving ? 'שומר…' : BLOCK_KIND_LABELS[kind]}
+        </Button>
+      </div>
+
+      <div className="mt-10">
+        <div style={{ fontSize: 11.5, letterSpacing: '0.18em', color: '#4A6B5C', marginBottom: 12 }}>חסימות קיימות</div>
+        {blocks.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: '#4A6B5C' }}>אין חסימות מוגדרות</div>
+        ) : (
+          <div className="space-y-2">
+            {blocks.map(b => (
+              <div key={b._id} className="flex items-center justify-between gap-3 px-4 py-3" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.08)', borderRadius: 2 }}>
+                <div className="min-w-0">
+                  <div style={{ fontSize: 13.5, fontWeight: 500 }}>{describe(b)}</div>
+                  {b.reason && <div className="truncate" style={{ fontSize: 12, color: '#4A6B5C' }}>{b.reason}</div>}
+                </div>
+                <button onClick={() => void remove(b._id)} className="text-[12.5px] hover:underline shrink-0" style={{ color: '#C4634A' }}>הסרה</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Drawer>
   )
 }
 
@@ -598,10 +934,20 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [filter, setFilter] = useState('all')
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
+  const filterTabs: [string, string][] = [
+    ['all', 'הכל'],
+    ...Object.values(AppointmentStatus).map(s => [s, APPOINTMENT_STATUS_LABELS[s]] as [string, string]),
+  ]
 
-  const updateStatus = async (id: string, status: string) => {
+  const updateStatus = async (id: string, status: AppointmentStatus) => {
     const res = await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeader() }, body: JSON.stringify({ status }) })
     if (!res.ok) return
+    onStatusChange()
+    setSelected(null)
+  }
+
+  const approve = async (id: string) => {
+    if (!await approveAppointment(id)) return
     onStatusChange()
     setSelected(null)
   }
@@ -609,7 +955,7 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
   return (
     <div className="p-6 md:p-10">
       <div className="flex flex-wrap items-center gap-2 mb-6">
-        {([['all','הכל'],['pending','ממתין'],['scheduled','מאושר'],['completed','הושלם'],['cancelled','בוטל'],['noshow','לא הגיע']] as [string,string][]).map(([k, l]) => (
+        {filterTabs.map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
             className="text-[13px] px-4 h-9"
             style={{ background: filter === k ? '#1C2A24' : 'transparent', color: filter === k ? '#F5F1EA' : '#1C2A24', border: `1px solid ${filter === k ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2 }}>
@@ -617,37 +963,77 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
           </button>
         ))}
       </div>
-      <div style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-        <table className="w-full">
-          <thead>
-            <tr style={{ background: '#EBE4D6' }}>
-              {['שם', 'טלפון', 'תאריך', 'שעה', 'סטטוס', ''].map(h => (
-                <th key={h} className="text-right px-5 py-3" style={{ fontSize: 11.5, letterSpacing: '0.1em', color: '#4A6B5C', fontWeight: 500 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((a, i) => (
-              <tr key={a._id} onClick={() => setSelected(a)} className="cursor-pointer hover:bg-[#F5F1EA] transition-colors"
-                style={{ borderBottom: i < filtered.length - 1 ? '1px solid rgba(28,42,36,0.06)' : 'none' }}>
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar name={a.name} size={30} />
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
-                  </div>
-                </td>
-                <td className="px-5 py-4" style={{ fontSize: 13, direction: 'ltr', textAlign: 'right' }}>{a.phone}</td>
-                <td className="px-5 py-4" style={{ fontSize: 13, color: '#2A3D34' }}>{new Date(a.date + 'T00:00:00').toLocaleDateString('he-IL')}</td>
-                <td className="px-5 py-4" style={{ fontSize: 13, direction: 'ltr', textAlign: 'right' }}>{a.time}</td>
-                <td className="px-5 py-4"><Badge tone={a.status}>{({ scheduled: 'מתוזמן', completed: 'הושלם', cancelled: 'בוטל', noshow: 'לא הגיע', pending: 'ממתין' } as Record<string,string>)[a.status]}</Badge></td>
-                <td className="px-5 py-4" style={{ color: '#4A6B5C' }}><Icon.ArrowLeft s={14} /></td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-10 text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>אין תורים</td></tr>
+
+      {/* mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.map(a => (
+          <div key={a._id} onClick={() => setSelected(a)} className="p-4 cursor-pointer" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar name={a.name} size={32} />
+                <div className="min-w-0">
+                  <div className="truncate" style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
+                  <div style={{ fontSize: 12, color: '#4A6B5C', direction: 'ltr', textAlign: 'right' }}>{a.phone}</div>
+                </div>
+              </div>
+              <Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge>
+            </div>
+            <div className="mt-2 flex items-center gap-2" style={{ fontSize: 13, color: '#2A3D34' }}>
+              <Icon.Calendar s={13} /> {new Date(a.date + 'T00:00:00').toLocaleDateString('he-IL')}
+              <span style={{ direction: 'ltr' }}>{a.time}</span>
+            </div>
+            {a.status === AppointmentStatus.Pending && (
+              <div className="mt-3">
+                <Button variant="primary" size="sm" onClick={() => void approve(a._id)} className="w-full">אישור התור</Button>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        ))}
+        {filtered.length === 0 && <div className="py-10 text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>אין תורים</div>}
+      </div>
+
+      {/* desktop table */}
+      <div className="hidden md:block" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr style={{ background: '#EBE4D6' }}>
+                {['שם', 'טלפון', 'תאריך', 'שעה', 'סטטוס', '', ''].map((h, i) => (
+                  <th key={i} className="text-right px-5 py-3" style={{ fontSize: 11.5, letterSpacing: '0.1em', color: '#4A6B5C', fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((a, i) => (
+                <tr key={a._id} onClick={() => setSelected(a)} className="cursor-pointer hover:bg-[#F5F1EA] transition-colors"
+                  style={{ borderBottom: i < filtered.length - 1 ? '1px solid rgba(28,42,36,0.06)' : 'none' }}>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={a.name} size={30} />
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4" style={{ fontSize: 13, direction: 'ltr', textAlign: 'right' }}>{a.phone}</td>
+                  <td className="px-5 py-4" style={{ fontSize: 13, color: '#2A3D34' }}>{new Date(a.date + 'T00:00:00').toLocaleDateString('he-IL')}</td>
+                  <td className="px-5 py-4" style={{ fontSize: 13, direction: 'ltr', textAlign: 'right' }}>{a.time}</td>
+                  <td className="px-5 py-4"><Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge></td>
+                  <td className="px-5 py-4">
+                    {a.status === AppointmentStatus.Pending && (
+                      <button onClick={e => { e.stopPropagation(); void approve(a._id) }}
+                        className="text-[12px] px-3 h-8" style={{ background: '#4A6B5C', color: '#F5F1EA', borderRadius: 2 }}>
+                        אישור
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-5 py-4" style={{ color: '#4A6B5C' }}><Icon.ArrowLeft s={14} /></td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>אין תורים</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {selected && (
@@ -659,7 +1045,7 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
               <div style={{ fontSize: 12.5, color: '#4A6B5C', marginTop: 2 }}>{selected.concern || ''}</div>
             </div>
           </div>
-          <Badge tone={selected.status}>{({ pending: 'ממתין לאישור', scheduled: 'מאושר', completed: 'הושלם', cancelled: 'בוטל', noshow: 'לא הגיע' } as Record<string,string>)[selected.status]}</Badge>
+          <Badge tone={selected.status}>{APPOINTMENT_STATUS_LABELS[selected.status]}</Badge>
           <div className="mt-4">
             <KV k="טלפון" v={<span style={{ direction: 'ltr', display: 'inline-block' }}>{selected.phone}</span>} icon="Phone" />
             <KV k="תאריך" v={new Date(selected.date + 'T00:00:00').toLocaleDateString('he-IL')} />
@@ -668,15 +1054,15 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
             {selected.notes && <KV k="הערות" v={selected.notes} multi />}
           </div>
           <div className="mt-8 space-y-3">
-            {selected.status === 'pending' && (
-              <Button variant="primary" onClick={() => void updateStatus(selected._id, 'scheduled')} className="w-full">אישור התור</Button>
+            {selected.status === AppointmentStatus.Pending && (
+              <Button variant="primary" onClick={() => void approve(selected._id)} className="w-full">אישור התור</Button>
             )}
-            {selected.status === 'scheduled' && (
-              <Button variant="primary" onClick={() => void updateStatus(selected._id, 'completed')} className="w-full">סימון כהושלם</Button>
+            {selected.status === AppointmentStatus.Scheduled && (
+              <Button variant="primary" onClick={() => void updateStatus(selected._id, AppointmentStatus.Completed)} className="w-full">סימון כהושלם</Button>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="ghost" onClick={() => void updateStatus(selected._id, 'cancelled')}>ביטול תור</Button>
-              <Button variant="quiet" onClick={() => void updateStatus(selected._id, 'noshow')}>לא הגיע/ה</Button>
+              <Button variant="ghost" onClick={() => void updateStatus(selected._id, AppointmentStatus.Cancelled)}>ביטול תור</Button>
+              <Button variant="quiet" onClick={() => void updateStatus(selected._id, AppointmentStatus.NoShow)}>לא הגיע/ה</Button>
             </div>
           </div>
         </Drawer>
@@ -708,8 +1094,10 @@ function buildPatients(appointments: Appointment[]): Patient[] {
   const today = todayStr()
   for (const p of map.values()) {
     const sorted = [...p.appointments].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-    const past = sorted.filter(a => a.date < today || (a.date === today) && ['completed', 'cancelled', 'noshow'].includes(a.status))
-    const future = sorted.filter(a => a.date > today || (a.date >= today && ['pending', 'scheduled'].includes(a.status)))
+    const settledStatuses: AppointmentStatus[] = [AppointmentStatus.Completed, AppointmentStatus.Cancelled, AppointmentStatus.NoShow]
+    const activeStatuses: AppointmentStatus[] = [AppointmentStatus.Pending, AppointmentStatus.Scheduled]
+    const past = sorted.filter(a => a.date < today || (a.date === today) && settledStatuses.includes(a.status))
+    const future = sorted.filter(a => a.date > today || (a.date >= today && activeStatuses.includes(a.status)))
     p.visitCount = past.length
     p.lastVisit = past.length > 0 ? past[past.length - 1].date : null
     p.nextVisit = future.length > 0 ? future[0].date : null
@@ -719,7 +1107,6 @@ function buildPatients(appointments: Appointment[]): Patient[] {
 
 function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => void }) {
   const sorted = [...patient.appointments].sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
-  const STATUS_LABELS: Record<string, string> = { pending: 'ממתין לאישור', scheduled: 'מאושר', completed: 'הושלם', cancelled: 'בוטל', noshow: 'לא הגיע' }
   return (
     <Drawer onClose={onClose} title="פרטי מטופל" wide>
       <div className="flex items-center gap-4 mb-6">
@@ -752,7 +1139,7 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
               <div style={{ fontSize: 11.5, color: '#4A6B5C', direction: 'ltr', display: 'inline-block' }}>{a.time}</div>
             </div>
             {a.concern && <div className="flex-1 mx-4 truncate" style={{ fontSize: 12.5, color: '#2A3D34' }}>{a.concern}</div>}
-            <Badge tone={a.status}>{STATUS_LABELS[a.status] ?? a.status}</Badge>
+            <Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status] ?? a.status}</Badge>
           </div>
         ))}
         {sorted.length === 0 && <div style={{ fontSize: 13.5, color: '#4A6B5C' }}>אין תורים</div>}
@@ -777,7 +1164,32 @@ function PatientsView({ appointments }: { appointments: Appointment[] }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש לפי שם או טלפון…" className="flex-1 bg-transparent outline-none text-[13px]" />
         </div>
       </div>
-      <div style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+      {/* mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.map(p => (
+          <button key={p.phone} onClick={() => setSelected(p)} className="w-full text-right p-4" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+            <div className="flex items-center gap-3">
+              <Avatar name={p.name} size={32} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate" style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
+                <div style={{ fontSize: 12, color: '#4A6B5C', direction: 'ltr', textAlign: 'right' }}>{p.phone}</div>
+              </div>
+              <div className="text-center shrink-0">
+                <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 18 }}>{p.visitCount}</div>
+                <div style={{ fontSize: 10.5, color: '#4A6B5C' }}>ביקורים</div>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between" style={{ fontSize: 12, color: '#4A6B5C' }}>
+              <span>ביקור אחרון: {p.lastVisit ? new Date(p.lastVisit + 'T00:00:00').toLocaleDateString('he-IL') : '—'}</span>
+              <span style={{ color: p.nextVisit ? '#2A5C3F' : '#4A6B5C' }}>תור הבא: {p.nextVisit ? new Date(p.nextVisit + 'T00:00:00').toLocaleDateString('he-IL') : '—'}</span>
+            </div>
+          </button>
+        ))}
+        {filtered.length === 0 && <div className="py-10 text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>אין מטופלים</div>}
+      </div>
+
+      {/* desktop table */}
+      <div className="hidden md:block" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
         <table className="w-full">
           <thead>
             <tr style={{ background: '#EBE4D6' }}>
@@ -856,6 +1268,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const [navOpen, setNavOpen] = useState(false)
   const { leads, error: leadsError, refresh: refreshLeads } = useLeads()
   const { appointments, error: apptError, refresh: refreshAppts } = useAppointments()
+  const { blocks, refresh: refreshBlocks } = useScheduleBlocks()
 
   return (
     <div className="flex min-h-screen" style={{ background: '#F5F1EA', color: '#1C2A24' }}>
@@ -869,9 +1282,9 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
           </div>
         )}
         <div className="flex-1 overflow-auto">
-          {view === 'today'        && <TodayView appointments={appointments} leads={leads} />}
+          {view === 'today'        && <TodayView appointments={appointments} leads={leads} onStatusChange={refreshAppts} />}
           {view === 'leads'        && <LeadsView leads={leads} onSelect={setSelectedLead} />}
-          {view === 'calendar'     && <CalendarView appointments={appointments} />}
+          {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} onBlocksChange={refreshBlocks} />}
           {view === 'appointments' && <AppointmentsView appointments={appointments} onStatusChange={refreshAppts} />}
           {view === 'patients'     && <PatientsView appointments={appointments} />}
           {view === 'settings'     && <SettingsView />}

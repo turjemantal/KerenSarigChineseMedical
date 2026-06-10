@@ -3,6 +3,8 @@ import { Enso, Chop, Button, Label, FormField } from './shared'
 import { Icon } from './icons'
 import { getClient, getToken, saveAuth, authHeader } from '../auth'
 import type { ClientProfile } from '../auth'
+import { SLOT_PERIODS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLOSED_WEEKDAYS } from '../constants'
+import type { PublicScheduleBlock } from '../constants'
 
 // ── types ──────────────────────────────────────────────────────────────────────
 interface BookingData {
@@ -14,6 +16,13 @@ interface BookingData {
 }
 
 type ModalStep = 'phone' | 'otp' | 'schedule' | 'details' | 'confirm' | 'done'
+
+const toDateStr = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+const dateInBlock = (dateStr: string, b: PublicScheduleBlock) => dateStr >= b.startDate && dateStr <= b.endDate
 
 // ── main modal ─────────────────────────────────────────────────────────────────
 export default function BookingModal({ open, onClose, onPortal }: { open: boolean; onClose: () => void; onPortal?: () => void }) {
@@ -140,7 +149,7 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
           {step === 'schedule' && (
             <Footer>
               <button onClick={onClose} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>ביטול</button>
-              <Button variant="primary" onClick={() => setStep('details')} disabled={!data.date || !data.time}>
+              <Button variant="primary" pill onClick={() => setStep('details')} disabled={!data.date || !data.time}>
                 המשך <Icon.ArrowLeft />
               </Button>
             </Footer>
@@ -148,22 +157,27 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
           {step === 'details' && (
             <Footer>
               <button onClick={() => setStep('schedule')} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>→ חזרה</button>
-              <Button variant="primary" onClick={() => setStep('confirm')} disabled={!client?.name && !data.name.trim()}>
+              <Button variant="primary" pill onClick={() => setStep('confirm')} disabled={!client?.name && !data.name.trim()}>
                 המשך <Icon.ArrowLeft />
               </Button>
             </Footer>
           )}
           {step === 'confirm' && (
-            <Footer>
-              <button onClick={() => setStep('details')} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>→ חזרה</button>
-              <Button variant="primary" onClick={handleBooked} disabled={submitting}>
-                {submitting ? 'קובע תור…' : 'אישור התור'} <Icon.ArrowLeft />
-              </Button>
-            </Footer>
+            <>
+              <p className="px-6 md:px-10 pb-3" style={{ fontSize: 11.5, color: '#4A6B5C', lineHeight: 1.6 }}>
+                אישור התור מהווה הסכמה ל<a href="/privacy" target="_blank" style={{ textDecoration: 'underline' }}>מדיניות הפרטיות</a> שלנו. הפרטים ישמשו לתיאום הטיפול ולשליחת עדכונים בלבד.
+              </p>
+              <Footer>
+                <button onClick={() => setStep('details')} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>→ חזרה</button>
+                <Button variant="primary" pill onClick={handleBooked} disabled={submitting}>
+                  {submitting ? 'קובע תור…' : 'אישור התור'} <Icon.ArrowLeft />
+                </Button>
+              </Footer>
+            </>
           )}
           {step === 'done' && (
             <Footer>
-              <Button variant="primary" onClick={onClose}>סיום</Button>
+              <Button variant="primary" pill onClick={onClose}>סיום</Button>
             </Footer>
           )}
         </div>
@@ -196,7 +210,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
 
   const sendOtp = async () => {
     const p = normalizePhone(phone)
-    if (!/^05\d{8}$/.test(p)) { setError('אנא הזינו מספר טלפון ישראלי תקין (05X-XXXXXXX)'); return }
+    if (!PHONE_REGEX.test(p)) { setError(UI_ERRORS.INVALID_PHONE); return }
     setLoading(true); setError('')
     try {
       const res = await fetch('/api/auth/request-otp', {
@@ -206,7 +220,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
       if (!res.ok) throw new Error()
       setPhase('otp')
       setTimeout(() => otpRef.current?.focus(), 100)
-    } catch { setError('שגיאה בשליחת הקוד, נסו שוב') } finally { setLoading(false) }
+    } catch { setError(UI_ERRORS.OTP_SEND_FAILED) } finally { setLoading(false) }
   }
 
   const verifyOtp = async () => {
@@ -216,7 +230,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalizePhone(phone), code: otp }),
       })
-      if (!res.ok) { setError('הקוד שגוי, נסו שוב'); return }
+      if (!res.ok) { setError(UI_ERRORS.OTP_WRONG); return }
       const { token, client } = await res.json()
       saveAuth(token, client)
       if (!client.name) {
@@ -226,7 +240,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
       } else {
         onNext(client)
       }
-    } catch { setError('שגיאה, נסו שוב') } finally { setLoading(false) }
+    } catch { setError(UI_ERRORS.GENERIC) } finally { setLoading(false) }
   }
 
   const submitName = async () => {
@@ -266,7 +280,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
             {error && <div className="mt-2 text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
           </div>
           <div className="mt-6">
-            <Button variant="primary" onClick={sendOtp} disabled={loading}>
+            <Button variant="primary" pill onClick={sendOtp} disabled={loading}>
               {loading ? 'שולח…' : 'שליחת קוד'} <Icon.ArrowLeft />
             </Button>
           </div>
@@ -288,7 +302,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
           </div>
           {error && <div className="mt-3 text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
           <div className="mt-6 flex items-center gap-4">
-            <Button variant="primary" onClick={verifyOtp} disabled={loading || otp.length < 6}>
+            <Button variant="primary" pill onClick={verifyOtp} disabled={loading || otp.length < 6}>
               {loading ? 'בודק…' : 'אימות'} <Icon.ArrowLeft />
             </Button>
             <button onClick={() => { setPhase('phone'); setOtp(''); setError('') }} className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>
@@ -312,7 +326,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
           </div>
           {error && <div className="mt-3 text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
           <div className="mt-6">
-            <Button variant="primary" onClick={submitName} disabled={loading || !name.trim()}>
+            <Button variant="primary" pill onClick={submitName} disabled={loading || !name.trim()}>
               {loading ? 'שומר…' : 'המשך'} <Icon.ArrowLeft />
             </Button>
           </div>
@@ -327,6 +341,7 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
   const today = new Date()
   const [viewMonth, setViewMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [takenSlots, setTakenSlots] = useState<Set<string>>(new Set())
+  const [blocks, setBlocks] = useState<PublicScheduleBlock[]>([])
   const hebMonths = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר']
 
   const firstDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
@@ -338,19 +353,44 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
 
   useEffect(() => {
     if (!data.date) return
-    const d = data.date
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const dateStr = toDateStr(data.date)
     fetch(`/api/appointments/availability/${dateStr}`)
       .then(r => r.json())
       .then((times: string[]) => setTakenSlots(new Set(times)))
       .catch(() => setTakenSlots(new Set()))
   }, [data.date])
 
+  // closed days / blocked hours for the viewed month
+  useEffect(() => {
+    const from = toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1))
+    const to = toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0))
+    fetch(`/api/schedule-blocks/public?from=${from}&to=${to}`)
+      .then(r => r.json())
+      .then((b: PublicScheduleBlock[]) => setBlocks(Array.isArray(b) ? b : []))
+      .catch(() => setBlocks([]))
+  }, [viewMonth])
+
+  const isDayClosed = (dateStr: string) =>
+    blocks.some(b => dateInBlock(dateStr, b) && !b.startTime)
+
+  const isSlotBlocked = (dateStr: string, time: string) =>
+    blocks.some(b => dateInBlock(dateStr, b) && !!b.startTime && !!b.endTime && time >= b.startTime && time < b.endTime)
+
+  // compare calendar days only — today at 00:00, so today itself stays bookable
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
   const isDisabled = (d: number | null) => {
     if (!d) return true
     const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d)
-    return date < today || date.getDay() === 6
+    return date < todayStart || CLOSED_WEEKDAYS.includes(date.getDay()) || isDayClosed(toDateStr(date))
+  }
+
+  // when booking today, slots whose time already passed are unavailable
+  const isSlotInPast = (dateStr: string, time: string) => {
+    if (dateStr !== toDateStr(today)) return false
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const nowTime = `${pad(today.getHours())}:${pad(today.getMinutes())}`
+    return time <= nowTime
   }
   const isSelected = (d: number | null) => {
     if (!d || !data.date) return false
@@ -358,16 +398,12 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
            data.date.getMonth() === viewMonth.getMonth() &&
            data.date.getDate() === d
   }
-  const slots: Record<string, string[]> = {
-    בוקר: ['09:00', '09:45', '10:30', '11:15'],
-    'אחה״צ': ['13:30', '14:15', '15:00', '15:45', '16:30'],
-    ערב: ['17:15', '18:00'],
-  }
+  const slots = SLOT_PERIODS
 
   return (
     <div className="py-6">
       <h3 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 32, fontWeight: 400 }}>בחירת מועד</h3>
-      <p className="mt-3" style={{ fontSize: 14.5, lineHeight: 1.7, color: '#2A3D34' }}>הפגישה נמשכת 60 דקות. תישלח תזכורת ב-SMS יום לפני.</p>
+      <p className="mt-3" style={{ fontSize: 14.5, lineHeight: 1.7, color: '#2A3D34' }}>הפגישה נמשכת {APPOINTMENT_DURATION_MINUTES} דקות. תישלח תזכורת ב-SMS יום לפני.</p>
 
       <div className="mt-8 grid md:grid-cols-2 gap-6">
         {/* Calendar */}
@@ -415,7 +451,8 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
                   <div style={{ fontSize: 12.5, color: '#4A6B5C', marginBottom: 8 }}>{period}</div>
                   <div className="grid grid-cols-4 gap-2">
                     {times.map(t => {
-                      const isTaken = takenSlots.has(t)
+                      const isTaken = takenSlots.has(t) ||
+                        (data.date ? isSlotBlocked(toDateStr(data.date), t) || isSlotInPast(toDateStr(data.date), t) : false)
                       const selected = data.time === t
                       return (
                         <button key={t} disabled={isTaken} onClick={() => update('time', t)}
@@ -483,7 +520,7 @@ function StepConfirm({ data, client }: { data: BookingData; client: ClientProfil
         <div className="flex items-start justify-between gap-4">
           <div>
             <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22 }}>{dateStr}</div>
-            {data.time && <div className="mt-1 flex items-center gap-2" style={{ fontSize: 14, color: '#2A3D34' }}><Icon.Clock s={14} /> <span style={{ direction: 'ltr' }}>{data.time}</span> · 50 דקות</div>}
+            {data.time && <div className="mt-1 flex items-center gap-2" style={{ fontSize: 14, color: '#2A3D34' }}><Icon.Clock s={14} /> <span style={{ direction: 'ltr' }}>{data.time}</span> · {APPOINTMENT_DURATION_MINUTES} דקות</div>}
           </div>
           <Chop char="約" size={60} rotate={4} />
         </div>
@@ -515,7 +552,7 @@ function StepDone({ data, client, onPortal }: { data: BookingData; client: Clien
       </p>
       <div className="mt-8 p-5 text-right" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
         <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22 }}>{dateStr}</div>
-        {data.time && <div className="mt-1" style={{ direction: 'ltr', textAlign: 'right', fontSize: 14, color: '#4A6B5C' }}>{data.time} · 50 דקות</div>}
+        {data.time && <div className="mt-1" style={{ direction: 'ltr', textAlign: 'right', fontSize: 14, color: '#4A6B5C' }}>{data.time} · {APPOINTMENT_DURATION_MINUTES} דקות</div>}
       </div>
       <p className="mt-5" style={{ fontSize: 13, color: '#4A6B5C' }}>
         לניהול התורים שלך:{' '}

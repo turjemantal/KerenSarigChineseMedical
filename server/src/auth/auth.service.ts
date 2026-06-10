@@ -7,6 +7,8 @@ import { ClientsService } from '../clients/clients.service';
 import { MESSAGING_PROVIDER } from '../integrations/messaging/messaging.token';
 import { IMessagingProvider } from '../integrations/messaging/messaging-provider.interface';
 import { OTP_CODE_MIN, OTP_CODE_RANGE } from '../common/constants/otp.constants';
+import { ERRORS, Entity, notFoundMessage } from '../common/constants/errors.constants';
+import { UserRole } from '../common/enums/user-role.enum';
 import { config } from '../config';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -33,7 +35,7 @@ export class AuthService {
   async verifyOtp(dto: VerifyOtpDto): Promise<{ token: string; client: object }> {
     const otp = await this.otpModel.findOne({ phone: dto.phone, code: dto.code }).exec();
     if (!otp || otp.expiresAt < new Date()) {
-      throw new BadRequestException('Invalid or expired OTP');
+      throw new BadRequestException(ERRORS.INVALID_OR_EXPIRED_OTP);
     }
 
     await this.otpModel.deleteMany({ phone: dto.phone });
@@ -58,14 +60,14 @@ export class AuthService {
   }
 
   async adminLogin(dto: AdminLoginDto): Promise<{ token: string }> {
-    if (dto.password !== config.adminPassword) throw new UnauthorizedException('סיסמה שגויה');
-    const token = this.jwtService.sign({ sub: 'admin', role: 'admin' }, { expiresIn: config.jwt.adminExpiry });
+    if (dto.password !== config.adminPassword) throw new UnauthorizedException(ERRORS.WRONG_PASSWORD);
+    const token = this.jwtService.sign({ sub: UserRole.ADMIN, role: UserRole.ADMIN }, { expiresIn: config.jwt.adminExpiry });
     return { token };
   }
 
   async updateName(phone: string, dto: UpdateNameDto): Promise<{ token: string; client: object }> {
     const client = await this.clientsService.updateName(phone, dto.name);
-    if (!client) throw new BadRequestException('Client not found');
+    if (!client) throw new BadRequestException(notFoundMessage(Entity.Client, phone));
     const token = this.jwtService.sign({ sub: String(client._id), phone: client.phone, name: client.name });
     return { token, client: { _id: client._id, phone: client.phone, name: client.name, email: client.email } };
   }

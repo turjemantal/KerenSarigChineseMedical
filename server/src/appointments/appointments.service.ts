@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { isValidObjectId } from 'mongoose';
 import { AppointmentsDao } from './appointments.dao';
+import { Entity, notFoundMessage } from '../common/constants/errors.constants';
 import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -25,8 +27,9 @@ export class AppointmentsService {
   }
 
   async findById(id: string): Promise<AppointmentDocument> {
+    if (!isValidObjectId(id)) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     const appt = await this.dao.findById(id);
-    if (!appt) throw new NotFoundException(`Appointment ${id} not found`);
+    if (!appt) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     return appt;
   }
 
@@ -39,13 +42,15 @@ export class AppointmentsService {
   }
 
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
+    if (!isValidObjectId(id)) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     const appt = await this.dao.update(id, dto);
-    if (!appt) throw new NotFoundException(`Appointment ${id} not found`);
+    if (!appt) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     return appt;
   }
 
   async delete(id: string): Promise<void> {
+    if (!isValidObjectId(id)) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     const appt = await this.dao.delete(id);
-    if (!appt) throw new NotFoundException(`Appointment ${id} not found`);
+    if (!appt) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
   }
 }

@@ -60,6 +60,23 @@ describe('SmsMessagingProvider', () => {
     });
   });
 
+  describe('sendBookingRequestReceived', () => {
+    it('sends a pending-approval SMS with first name, Hebrew date, and time', async () => {
+      await provider.sendBookingRequestReceived('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(text).toContain('Alice');
+      expect(text).toContain('מאי');
+      expect(text).toContain('09:00');
+      expect(text).toContain('ממתינה לאישור');
+    });
+
+    it('does not claim the appointment is approved', async () => {
+      await provider.sendBookingRequestReceived('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(text).not.toMatch(/(^|\s)אושר/);
+    });
+  });
+
   describe('sendAppointmentReminder', () => {
     it('sends a Hebrew reminder SMS containing the appointment time', async () => {
       await provider.sendAppointmentReminder('0501234567', '14:30');

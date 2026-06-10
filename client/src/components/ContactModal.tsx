@@ -150,17 +150,24 @@ export default function ContactModal({ open, onClose }: { open: boolean; onClose
           )}
         </div>
 
-        <div className="px-6 py-5 flex items-center justify-between gap-4" style={{ borderTop: '1px solid rgba(28,42,36,0.1)' }}>
-          {done ? (
-            <Button variant="primary" onClick={onClose}>סיום</Button>
-          ) : (
-            <>
-              <button onClick={onClose} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>ביטול</button>
-              <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit || submitting}>
-                {submitting ? 'שולח…' : 'שליחת הפנייה'} <Icon.ArrowLeft />
-              </Button>
-            </>
+        <div className="px-6 py-5" style={{ borderTop: '1px solid rgba(28,42,36,0.1)' }}>
+          {!done && (
+            <p className="mb-3" style={{ fontSize: 11.5, color: '#4A6B5C', lineHeight: 1.6 }}>
+              שליחת הטופס מהווה הסכמה ל<a href="/privacy" target="_blank" style={{ textDecoration: 'underline' }}>מדיניות הפרטיות</a> שלנו. הפרטים ישמשו ליצירת קשר ולתיאום טיפול בלבד.
+            </p>
           )}
+          <div className="flex items-center justify-between gap-4">
+            {done ? (
+              <Button variant="primary" pill onClick={onClose}>סיום</Button>
+            ) : (
+              <>
+                <button onClick={onClose} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>ביטול</button>
+                <Button variant="primary" pill onClick={handleSubmit} disabled={!canSubmit || submitting}>
+                  {submitting ? 'שולח…' : 'שליחת הפנייה'} <Icon.ArrowLeft />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

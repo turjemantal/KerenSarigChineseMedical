@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -19,6 +20,8 @@ import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
 import { createAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
+import { DATE_REGEX } from '../common/constants/validation.constants';
+import { ERRORS } from '../common/constants/errors.constants';
 
 @Controller('appointments')
 export class AppointmentsController {
@@ -48,6 +51,9 @@ export class AppointmentsController {
   // must come before :id
   @Get('availability/:date')
   getAvailability(@Param('date') date: string) {
+    if (!DATE_REGEX.test(date)) {
+      throw new BadRequestException(ERRORS.INVALID_DATE_FORMAT);
+    }
     return this.manager.getAvailability(date);
   }
 

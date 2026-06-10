@@ -32,3 +32,11 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
   transition: border-color .2s;
 }
 .field-input:focus { border-color: #4A6B5C; }
+
+/* iOS Safari zooms the page when a focused input has font-size < 16px.
+   Force 16px on touch-size screens so the admin portal stays put on iPhone. */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

@@ -38,8 +38,12 @@ export const config = {
     get accountSid(): string {
       return process.env.TWILIO_ACCOUNT_SID!;
     },
-    get authToken(): string {
-      return process.env.TWILIO_AUTH_TOKEN!;
+    // Scoped API key (SK…) + secret — revocable per-key without rotating the account token.
+    get apiKeySid(): string {
+      return process.env.TWILIO_API_KEY_SID!;
+    },
+    get apiKeySecret(): string {
+      return process.env.TWILIO_API_KEY_SECRET!;
     },
     get fromNumber(): string {
       return process.env.TWILIO_FROM_NUMBER!;
@@ -66,6 +70,10 @@ export const config = {
       },
       get bookingConfirmation(): string {
         return process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
+      },
+      // falls back to the confirmation template until a dedicated "request received" template is approved
+      get bookingRequest(): string {
+        return process.env.WHATSAPP_TEMPLATE_BOOKING_REQUEST || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },
       get appointmentReminder(): string {
         return process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER!;

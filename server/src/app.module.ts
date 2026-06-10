@@ -5,6 +5,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { LeadsModule } from './leads/leads.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { ScheduleBlocksModule } from './schedule-blocks/schedule-blocks.module';
 import { ClientsModule } from './clients/clients.module';
 import { AuthModule } from './auth/auth.module';
 import { MessagingModule } from './integrations/messaging/messaging.module';
@@ -18,6 +19,7 @@ import { config } from './config';
     MessagingModule,
     LeadsModule,
     AppointmentsModule,
+    ScheduleBlocksModule,
     ClientsModule,
     AuthModule,
   ],

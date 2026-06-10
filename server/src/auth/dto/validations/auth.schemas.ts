@@ -5,38 +5,39 @@ import {
   NAME_MAX_LENGTH,
   OTP_CODE_LENGTH,
 } from '../../../common/constants/validation.constants';
+import { ERRORS } from '../../../common/constants/errors.constants';
 
 export const requestOtpSchema = Joi.object({
   phone: Joi.string().pattern(PHONE_REGEX).required().messages({
-    'string.pattern.base': 'מספר טלפון לא תקין — אנא הזינו מספר ישראלי תקין (05X-XXXXXXX)',
-    'any.required': 'טלפון הוא שדה חובה',
+    'string.pattern.base': ERRORS.INVALID_PHONE,
+    'any.required': ERRORS.REQUIRED_PHONE,
   }),
 });
 
 export const verifyOtpSchema = Joi.object({
   phone: Joi.string().pattern(PHONE_REGEX).required().messages({
-    'string.pattern.base': 'מספר טלפון לא תקין',
-    'any.required': 'טלפון הוא שדה חובה',
+    'string.pattern.base': ERRORS.INVALID_PHONE,
+    'any.required': ERRORS.REQUIRED_PHONE,
   }),
   code: Joi.string().length(OTP_CODE_LENGTH).pattern(/^\d+$/).required().messages({
-    'string.length': `קוד האימות חייב להכיל ${OTP_CODE_LENGTH} ספרות`,
-    'string.pattern.base': 'קוד האימות חייב להכיל ספרות בלבד',
-    'any.required': 'קוד אימות הוא שדה חובה',
+    'string.length': ERRORS.otpLength(OTP_CODE_LENGTH),
+    'string.pattern.base': ERRORS.OTP_DIGITS_ONLY,
+    'any.required': ERRORS.REQUIRED_OTP,
   }),
   name: Joi.string().trim().min(NAME_MIN_LENGTH).max(NAME_MAX_LENGTH).optional(),
 });
 
 export const adminLoginSchema = Joi.object({
   password: Joi.string().required().messages({
-    'any.required': 'סיסמה היא שדה חובה',
-    'string.empty': 'סיסמה היא שדה חובה',
+    'any.required': ERRORS.REQUIRED_PASSWORD,
+    'string.empty': ERRORS.REQUIRED_PASSWORD,
   }),
 });
 
 export const updateNameSchema = Joi.object({
   name: Joi.string().trim().min(NAME_MIN_LENGTH).max(NAME_MAX_LENGTH).required().messages({
-    'string.min': `שם חייב להכיל לפחות ${NAME_MIN_LENGTH} תווים`,
-    'string.empty': 'שם הוא שדה חובה',
-    'any.required': 'שם הוא שדה חובה',
+    'string.min': ERRORS.nameMinLength(NAME_MIN_LENGTH),
+    'string.empty': ERRORS.REQUIRED_NAME,
+    'any.required': ERRORS.REQUIRED_NAME,
   }),
 });

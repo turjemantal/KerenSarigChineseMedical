@@ -25,10 +25,13 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 
 - **Lead capture** — contact form sends enquiries to the admin dashboard
 - **OTP login** — passwordless auth via SMS or WhatsApp one-time code
-- **Appointment booking** — real-time slot availability check before confirming
+- **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone)
+- **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer)
+- **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API
 - **Client portal** — authenticated clients view and cancel their appointments
-- **Admin dashboard** — lead pipeline, appointment management, status updates
+- **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
 - **Automated reminders** — cron job at 09:00 sends reminders for next-day appointments
+- **Legal pages** — accessibility statement (`/accessibility`) and privacy policy (`/privacy`) per Israeli law (תקנה 35; חוק הגנת הפרטיות incl. Amendment 13)
 
 ---
 
@@ -176,9 +179,10 @@ Required in `DEV` / `PROD`:
 
 | Variable | Description |
 |---|---|
-| `TWILIO_ACCOUNT_SID` | From Twilio Console dashboard |
-| `TWILIO_AUTH_TOKEN` | From Twilio Console dashboard |
-| `TWILIO_FROM_NUMBER` | Your purchased Twilio number (e.g. `+12025551234`) |
+| `TWILIO_ACCOUNT_SID` | From Twilio Console dashboard (`AC...`) |
+| `TWILIO_API_KEY_SID` | Scoped API key (`SK...`) — Console → Account → API keys & tokens |
+| `TWILIO_API_KEY_SECRET` | Shown once when the API key is created |
+| `TWILIO_FROM_NUMBER` | Sender: a purchased Twilio number (`+12025551234`) or an alphanumeric sender ID (`KerenSarig`, max 11 chars, one-way only) |
 
 ### WhatsApp Cloud API (`MESSAGING_PROVIDER=whatsapp`)
 
@@ -269,7 +273,9 @@ make pull-prod EC2=ubuntu@<ip> KEY=~/.ssh/keren-clinic.pem
 - [ ] Strong `JWT_SECRET` — `openssl rand -hex 32`
 - [ ] Strong `ADMIN_PASSWORD`
 - [ ] `CLIENT_URL` set to your public domain or IP
-- [ ] Twilio number verified (trial) or upgraded account
+- [ ] `TWILIO_API_KEY_SID` + `TWILIO_API_KEY_SECRET` set (auth token is no longer used)
+- [ ] `TWILIO_FROM_NUMBER` — purchased number or alphanumeric sender ID (e.g. `KerenSarig`)
+- [ ] Twilio account upgraded (trial only delivers to verified numbers)
 - [ ] MongoDB Atlas cluster running and IP whitelisted
 
 ---

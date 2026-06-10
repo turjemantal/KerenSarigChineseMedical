@@ -32,7 +32,7 @@ type ButtonVariant = 'primary' | 'moss' | 'ghost' | 'seal' | 'quiet'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 export const Button = ({
-  children, variant = 'primary', size = 'md', onClick, type = 'button', className = '', disabled, ...rest
+  children, variant = 'primary', size = 'md', onClick, type = 'button', className = '', disabled, pill = false, ...rest
 }: {
   children: React.ReactNode
   variant?: ButtonVariant
@@ -41,13 +41,18 @@ export const Button = ({
   type?: 'button' | 'submit'
   className?: string
   disabled?: boolean
+  pill?: boolean
 }) => {
   const base = 'inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 select-none disabled:opacity-50'
   const sizes: Record<ButtonSize, string> = {
-    sm: 'h-9 px-4 text-[13px]',
-    md: 'h-11 px-5 text-[14px]',
-    lg: 'h-13 px-7 text-[15px]',
+    sm: 'h-9 text-[13px]',
+    md: 'h-11 text-[14px]',
+    lg: 'h-13 text-[15px]',
   }
+  // pills get extra horizontal padding so the curve embraces the text instead of hugging it
+  const paddings: Record<ButtonSize, string> = pill
+    ? { sm: 'px-6', md: 'px-8', lg: 'px-10' }
+    : { sm: 'px-4', md: 'px-5', lg: 'px-7' }
   const variants: Record<ButtonVariant, string> = {
     primary: 'bg-[#1C2A24] text-[#F5F1EA] hover:bg-[#2A3D34]',
     moss:    'bg-[#4A6B5C] text-[#F5F1EA] hover:bg-[#3D5A4D]',
@@ -60,8 +65,8 @@ export const Button = ({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
-      style={{ borderRadius: 2 }}
+      className={`${base} ${sizes[size]} ${paddings[size]} ${variants[variant]} ${className}`}
+      style={{ borderRadius: pill ? 999 : 2 }}
       {...rest}
     >
       {children}

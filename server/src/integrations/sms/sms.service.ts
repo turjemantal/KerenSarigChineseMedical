@@ -30,7 +30,8 @@ export class SmsService {
 
   private getClient(): Twilio {
     if (!this.client) {
-      this.client = new Twilio(config.twilio.accountSid, config.twilio.authToken);
+      const { accountSid, apiKeySid, apiKeySecret } = config.twilio;
+      this.client = new Twilio(apiKeySid, apiKeySecret, { accountSid });
     }
     return this.client;
   }
