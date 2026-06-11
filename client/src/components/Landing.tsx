@@ -223,10 +223,8 @@ function Approach() {
         </div>
         <div className="grid md:grid-cols-4 gap-0" style={{ borderTop: '1px solid rgba(245,241,234,0.15)' }}>
           {pillars.map((s, i) => (
-            <div key={s.n} className="py-8 md:py-10 md:pl-6" style={{
-              borderBottom: '1px solid rgba(245,241,234,0.15)',
-              borderLeft: i < pillars.length - 1 ? '1px solid rgba(245,241,234,0.15)' : 'none',
-            }}>
+            <div key={s.n}
+              className={`py-7 md:py-10 md:pl-6 border-b border-[rgba(245,241,234,0.15)] ${i < pillars.length - 1 ? 'md:border-l md:border-l-[rgba(245,241,234,0.15)]' : ''}`}>
               <div className={i === 0 ? '' : 'md:pr-6'}>
                 <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 14, color: '#C4634A', letterSpacing: '0.1em' }}>{s.n}</div>
                 <h3 className="mt-3" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22, fontWeight: 400 }}>{s.title}</h3>
@@ -315,6 +313,50 @@ function Areas() {
 
 // ---------- וידאו (YouTube) ----------
 // ---------- המלצות ----------
+function TestimonialCarousel({ className = '' }: { className?: string }) {
+  const [active, setActive] = useState(0)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  // closest card to the scroll position = active dot (direction-agnostic, RTL-safe)
+  const onScroll = () => {
+    const track = trackRef.current
+    if (!track) return
+    const cards = Array.from(track.children) as HTMLElement[]
+    const center = track.scrollLeft + track.clientWidth / 2
+    let best = 0, bestDist = Infinity
+    cards.forEach((c, i) => {
+      const d = Math.abs(c.offsetLeft + c.clientWidth / 2 - center)
+      if (d < bestDist) { bestDist = d; best = i }
+    })
+    setActive(best)
+  }
+
+  return (
+    <div className={className}>
+      <div ref={trackRef} onScroll={onScroll}
+        className="flex gap-4 overflow-x-auto no-scrollbar -mx-6 px-10"
+        style={{ scrollSnapType: 'x mandatory', scrollPaddingInline: 40 }}>
+        {TESTIMONIAL_VIDEOS.map(v => (
+          <div key={v.src} className="shrink-0 w-[78%]" style={{ scrollSnapAlign: 'center' }}>
+            <TestimonialVideo src={v.src} poster={v.poster} />
+          </div>
+        ))}
+      </div>
+      {/* position dots */}
+      <div className="flex items-center justify-center gap-2 mt-5">
+        {TESTIMONIAL_VIDEOS.map((v, i) => (
+          <span key={v.src} aria-hidden
+            className="transition-all duration-300"
+            style={{
+              width: active === i ? 22 : 7, height: 7, borderRadius: 99,
+              background: active === i ? '#C4634A' : 'rgba(28,42,36,0.2)',
+            }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function TestimonialVideo({ src, poster }: { src: string; poster: string }) {
   const [playing, setPlaying] = useState(false)
   const ref = useRef<HTMLVideoElement>(null)
@@ -348,11 +390,16 @@ function Stories() {
           <h2 className="mt-4" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontWeight: 400, fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>מטופלים משתפים.</h2>
         </div>
         {TESTIMONIAL_VIDEOS.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-[440px] sm:max-w-[900px] mx-auto">
-            {TESTIMONIAL_VIDEOS.map(v => (
-              <TestimonialVideo key={v.src} src={v.src} poster={v.poster} />
-            ))}
-          </div>
+          <>
+            {/* mobile — swipeable carousel */}
+            <TestimonialCarousel className="sm:hidden" />
+            {/* desktop — side-by-side grid */}
+            <div className="hidden sm:grid sm:grid-cols-3 gap-6 max-w-[900px] mx-auto">
+              {TESTIMONIAL_VIDEOS.map(v => (
+                <TestimonialVideo key={v.src} src={v.src} poster={v.poster} />
+              ))}
+            </div>
+          </>
         ) : (
           <div className="flex items-center justify-center text-center p-10" style={{ minHeight: 220, background: '#FFFFFF', border: '1px dashed rgba(28,42,36,0.25)', borderRadius: 2 }}>
             <div style={{ maxWidth: 520 }}>
