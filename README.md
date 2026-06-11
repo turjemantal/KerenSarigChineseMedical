@@ -258,15 +258,18 @@ curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker ubuntu
 
 ### Deploying updates
 
-**On your Mac:**
+One command does everything — builds the images, pushes to ECR, and restarts the EC2 stack:
 ```bash
 make deploy
 ```
 
-**Then update EC2:**
+If the EC2 IP changed (no Elastic IP yet — it changes on instance restart):
 ```bash
-make pull-prod EC2=ubuntu@<ip> KEY=~/.ssh/keren-clinic.pem
+make prod-ip                          # find the current IP
+make deploy EC2=ubuntu@<new-ip>       # deploy to it
 ```
+
+Other prod helpers: `make restart-prod` (skip rebuild), `make prod-logs` (tail server logs).
 
 ### Production checklist
 
