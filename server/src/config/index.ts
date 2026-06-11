@@ -28,6 +28,11 @@ export const config = {
     return process.env.ADMIN_PASSWORD!;
   },
 
+  // clinic owner's phone for new-booking alerts; empty = alerts disabled
+  get adminPhone(): string {
+    return process.env.ADMIN_PHONE ?? '';
+  },
+
   messaging: {
     get provider(): MessagingProvider {
       return (process.env.MESSAGING_PROVIDER ?? MessagingProvider.Whatsapp) as MessagingProvider;
@@ -74,6 +79,9 @@ export const config = {
       // falls back to the confirmation template until a dedicated "request received" template is approved
       get bookingRequest(): string {
         return process.env.WHATSAPP_TEMPLATE_BOOKING_REQUEST || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
+      },
+      get newBookingAlert(): string {
+        return process.env.WHATSAPP_TEMPLATE_NEW_BOOKING_ALERT || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },
       get appointmentReminder(): string {
         return process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER!;

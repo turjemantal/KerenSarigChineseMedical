@@ -1,7 +1,7 @@
 import * as Joi from 'joi';
 import { AppEnv } from '../common/enums/app-env.enum';
 import { MessagingProvider } from '../common/enums/messaging-provider.enum';
-import { TWILIO_ACCOUNT_SID_REGEX, TWILIO_API_KEY_SID_REGEX } from '../common/constants/validation.constants';
+import { TWILIO_ACCOUNT_SID_REGEX, TWILIO_API_KEY_SID_REGEX, PHONE_REGEX } from '../common/constants/validation.constants';
 
 const realEnvs = [AppEnv.Dev, AppEnv.Prod];
 
@@ -48,6 +48,7 @@ export const envSchema = Joi.object({
 
   JWT_SECRET: Joi.string().required(),
   ADMIN_PASSWORD: Joi.string().required(),
+  ADMIN_PHONE: Joi.string().pattern(PHONE_REGEX).allow('').optional(),
 
   MESSAGING_PROVIDER: Joi.string().valid(...Object.values(MessagingProvider)).default(MessagingProvider.Whatsapp),
 

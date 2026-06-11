@@ -227,22 +227,13 @@ function TopBar({ view, onOpenNav }: { view: string; onOpenNav: () => void }) {
     calendar:     'יומן טיפולים',
     appointments: 'ניהול תורים',
     patients:     'מטופלים',
-    settings:     'הגדרות',
   }
   return (
-    <div className="px-6 md:px-10 py-5 flex items-center justify-between gap-6" style={{ borderBottom: '1px solid rgba(28,42,36,0.1)', background: '#F5F1EA' }}>
-      <div className="flex items-center gap-4 min-w-0">
-        <button className="md:hidden" onClick={onOpenNav}><Icon.Menu /></button>
-        <h1 className="truncate" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 26, fontWeight: 400, letterSpacing: '-0.01em' }}>
-          {titles[view] || view}
-        </h1>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="hidden md:flex items-center gap-2 px-3 h-10" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2, width: 280 }}>
-          <Icon.Search s={16} />
-          <input placeholder="חיפוש מטופלים, פניות…" className="flex-1 bg-transparent outline-none text-[13px]" />
-        </div>
-      </div>
+    <div className="px-6 md:px-10 py-5 flex items-center gap-4" style={{ borderBottom: '1px solid rgba(28,42,36,0.1)', background: '#F5F1EA' }}>
+      <button className="md:hidden" onClick={onOpenNav} aria-label="תפריט"><Icon.Menu /></button>
+      <h1 className="truncate" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 26, fontWeight: 400, letterSpacing: '-0.01em' }}>
+        {titles[view] || view}
+      </h1>
     </div>
   )
 }
@@ -255,7 +246,6 @@ function Sidebar({ view, setView, onExit, open, onClose }: { view: string; setVi
     { id: 'calendar',     label: 'יומן',     icon: 'Calendar' },
     { id: 'appointments', label: 'תורים',    icon: 'Clock' },
     { id: 'patients',     label: 'מטופלים',  icon: 'Users' },
-    { id: 'settings',     label: 'הגדרות',   icon: 'Settings' },
   ]
   return (
     <>
@@ -758,7 +748,7 @@ function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: 
                       const hour = timeToDecimal(a.time)
                       const { bg, border } = apptColor(a.status)
                       return (
-                        <div key={a._id} className="absolute left-1.5 right-1.5 px-2 py-1.5 text-[11px] cursor-pointer hover:opacity-90 transition-opacity"
+                        <div key={a._id} className="absolute left-1.5 right-1.5 px-2 py-1.5 text-[11px]"
                           style={{
                             top: (hour - START_HOUR) * HOUR_H + 2,
                             height: DURATION_HOURS * HOUR_H - 4,
@@ -1226,41 +1216,6 @@ function PatientsView({ appointments }: { appointments: Appointment[] }) {
   )
 }
 
-// ---------- SettingsView ----------
-function SettingsView() {
-  const toggles = [
-    { l: 'פנייה חדשה באתר', on: true },
-    { l: 'ביטול תור', on: true },
-    { l: 'תזכורת להכנת נוסחה', on: true },
-    { l: 'הודעה ממטופל', on: false },
-  ]
-  return (
-    <div className="p-6 md:p-10 max-w-[760px]">
-      <Panel title="פרטי הקליניקה">
-        <div className="py-4 space-y-4">
-          <KV k="שם הקליניקה" v="קרן שריג — רפואה סינית" />
-          <KV k="כתובת" v="סוקולוב 40, רמת השרון, קומה 3" />
-          <KV k="טלפון" v={<span style={{ direction: 'ltr' }}>050-9031503</span>} />
-        </div>
-      </Panel>
-      <div className="mt-6">
-        <Panel title="התראות">
-          <div className="py-4 space-y-4">
-            {toggles.map(r => (
-              <div key={r.l} className="flex items-center justify-between py-2">
-                <span style={{ fontSize: 14 }}>{r.l}</span>
-                <div style={{ width: 40, height: 22, background: r.on ? '#4A6B5C' : '#DCD3BF', borderRadius: 11, position: 'relative' }}>
-                  <div style={{ width: 16, height: 16, background: '#F5F1EA', borderRadius: '50%', position: 'absolute', top: 3, right: r.on ? 21 : 3, transition: 'right 0.2s' }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
-    </div>
-  )
-}
-
 // ---------- Dashboard ----------
 export default function Dashboard({ onExit }: { onExit: () => void }) {
   const [view, setView] = useState('today')
@@ -1287,7 +1242,6 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
           {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} onBlocksChange={refreshBlocks} />}
           {view === 'appointments' && <AppointmentsView appointments={appointments} onStatusChange={refreshAppts} />}
           {view === 'patients'     && <PatientsView appointments={appointments} />}
-          {view === 'settings'     && <SettingsView />}
         </div>
       </main>
 

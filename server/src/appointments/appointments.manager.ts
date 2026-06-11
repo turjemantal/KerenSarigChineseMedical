@@ -10,6 +10,7 @@ import { IMessagingProvider } from '../integrations/messaging/messaging-provider
 import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { ERRORS } from '../common/constants/errors.constants';
 import { CLOSED_WEEKDAYS } from '../common/constants/defaults.constants';
+import { config } from '../config';
 import { clinicToday, clinicTimeNow, weekdayOf } from '../common/utils/date.utils';
 
 @Injectable()
@@ -27,6 +28,9 @@ export class AppointmentsManager {
     await this.assertNotBlocked(dto.date, dto.time);
     const appt = await this.service.create(dto);
     void this.messaging.sendBookingRequestReceived(appt.phone, appt.name, appt.date, appt.time);
+    if (config.adminPhone) {
+      void this.messaging.sendNewBookingAlert(config.adminPhone, appt.name, appt.date, appt.time);
+    }
     return appt;
   }
 

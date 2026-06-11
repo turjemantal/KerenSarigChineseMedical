@@ -28,3 +28,10 @@ export const smsBookingRequestText = (name: string, date: string, time: string):
 
 export const smsReminderText = (time: string): string =>
   `תזכורת: יש לך תור מחר בשעה ${time}. ${CLINIC_NAME}`;
+
+// admin alert — sent to the clinic owner when a new booking arrives
+export const smsNewBookingAlertText = (name: string, date: string, time: string): string =>
+  `תור חדש ממתין לאישור: ${name}, ${formatHebrewDate(date)} בשעה ${time}. לאישור: היכנסי לממשק הניהול.`;
+
+// new_booking_alert template: {{1}} = name, {{2}} = date, {{3}} = time
+export const newBookingAlertParams = bookingParams;

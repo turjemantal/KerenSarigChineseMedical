@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { IMessagingProvider } from '../messaging/messaging-provider.interface';
-import { otpParams, bookingParams, bookingRequestParams, reminderParams } from '../../common/constants/messages.constants';
+import { otpParams, bookingParams, bookingRequestParams, reminderParams, newBookingAlertParams } from '../../common/constants/messages.constants';
 import { config } from '../../config';
 
 @Injectable()
@@ -30,5 +30,13 @@ export class WhatsappMessagingProvider implements IMessagingProvider {
 
   sendAppointmentReminder(phone: string, time: string): Promise<void> {
     return this.whatsapp.sendTemplate(phone, config.whatsapp.templates.appointmentReminder, reminderParams(time));
+  }
+
+  sendNewBookingAlert(phone: string, name: string, date: string, time: string): Promise<void> {
+    return this.whatsapp.sendTemplate(
+      phone,
+      config.whatsapp.templates.newBookingAlert,
+      newBookingAlertParams(name, date, time),
+    );
   }
 }

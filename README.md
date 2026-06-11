@@ -158,6 +158,7 @@ Copy `.env.example` to `.env` and fill in values. The server **will not start** 
 | `APP_ENV` | `DEV` / `TEST` / `PROD` |
 | `JWT_SECRET` | Secret for signing JWTs — use `openssl rand -hex 32` |
 | `ADMIN_PASSWORD` | Password for the `/manager` admin dashboard |
+| `ADMIN_PHONE` | *(optional)* clinic owner's phone — gets an alert on every new booking |
 
 ### Messaging
 

@@ -31,6 +31,7 @@ const mockMessaging = {
   sendBookingRequestReceived: jest.fn().mockResolvedValue(undefined),
   sendBookingConfirmation: jest.fn().mockResolvedValue(undefined),
   sendAppointmentReminder: jest.fn().mockResolvedValue(undefined),
+  sendNewBookingAlert: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockScheduleBlocks = {
@@ -119,6 +120,25 @@ describe('AppointmentsManager', () => {
       const dto: CreateAppointmentDto = { phone: '0501111111', name: 'Alice', date: clinicToday(), time: '00:00' };
       await expect(manager.book(dto)).rejects.toThrow(BadRequestException);
       expect(mockService.create).not.toHaveBeenCalled();
+    });
+
+    it('alerts the admin phone about the new booking when ADMIN_PHONE is set', async () => {
+      process.env.ADMIN_PHONE = '0509999999';
+      mockService.create.mockResolvedValueOnce(appt1);
+      await manager.book({ phone: '0501111111', name: 'Alice', date: '2099-05-01', time: '09:00' });
+      await flushVoidPromises();
+      expect(mockMessaging.sendNewBookingAlert).toHaveBeenCalledWith(
+        '0509999999', appt1.name, appt1.date, appt1.time,
+      );
+      delete process.env.ADMIN_PHONE;
+    });
+
+    it('skips the admin alert when ADMIN_PHONE is not set', async () => {
+      delete process.env.ADMIN_PHONE;
+      mockService.create.mockResolvedValueOnce(appt1);
+      await manager.book({ phone: '0501111111', name: 'Alice', date: '2099-05-01', time: '09:00' });
+      await flushVoidPromises();
+      expect(mockMessaging.sendNewBookingAlert).not.toHaveBeenCalled();
     });
 
     it('rejects booking on a closed weekday (Saturday)', async () => {

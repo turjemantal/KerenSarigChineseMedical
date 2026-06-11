@@ -77,6 +77,17 @@ describe('SmsMessagingProvider', () => {
     });
   });
 
+  describe('sendNewBookingAlert', () => {
+    it('sends an admin alert with name, Hebrew date, and time', async () => {
+      await provider.sendNewBookingAlert('0509999999', 'Alice Smith', '2026-05-01', '09:00');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(text).toContain('תור חדש ממתין לאישור');
+      expect(text).toContain('Alice');
+      expect(text).toContain('מאי');
+      expect(text).toContain('09:00');
+    });
+  });
+
   describe('sendAppointmentReminder', () => {
     it('sends a Hebrew reminder SMS containing the appointment time', async () => {
       await provider.sendAppointmentReminder('0501234567', '14:30');
