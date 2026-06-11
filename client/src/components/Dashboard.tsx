@@ -73,6 +73,25 @@ function useAppointments() {
   return { appointments, loading, error, refresh }
 }
 
+interface RegisteredClient {
+  _id: string
+  phone: string
+  name?: string
+  createdAt?: string
+}
+
+function useClients() {
+  const [clients, setClients] = useState<RegisteredClient[]>([])
+  const refresh = () => {
+    fetch('/api/clients', { headers: adminAuthHeader() })
+      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<RegisteredClient[]> })
+      .then(setClients)
+      .catch(() => {})
+  }
+  useEffect(refresh, [])
+  return { clients, refresh }
+}
+
 function useScheduleBlocks() {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
   const refresh = () => {
@@ -1071,8 +1090,12 @@ interface Patient {
   appointments: Appointment[]
 }
 
-function buildPatients(appointments: Appointment[]): Patient[] {
+function buildPatients(appointments: Appointment[], clients: RegisteredClient[]): Patient[] {
   const map = new Map<string, Patient>()
+  // registered clients first — so someone who signed up but hasn't booked yet still appears
+  for (const c of clients) {
+    map.set(c.phone, { phone: c.phone, name: c.name || c.phone, visitCount: 0, lastVisit: null, nextVisit: null, appointments: [] })
+  }
   for (const a of appointments) {
     if (!map.has(a.phone)) {
       map.set(a.phone, { phone: a.phone, name: a.name, visitCount: 0, lastVisit: null, nextVisit: null, appointments: [] })
@@ -1138,10 +1161,10 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
   )
 }
 
-function PatientsView({ appointments }: { appointments: Appointment[] }) {
+function PatientsView({ appointments, clients }: { appointments: Appointment[]; clients: RegisteredClient[] }) {
   const [selected, setSelected] = useState<Patient | null>(null)
   const [search, setSearch] = useState('')
-  const patients = buildPatients(appointments)
+  const patients = buildPatients(appointments, clients)
   const filtered = search
     ? patients.filter(p => p.name.includes(search) || p.phone.includes(search))
     : patients
@@ -1224,6 +1247,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const { leads, error: leadsError, refresh: refreshLeads } = useLeads()
   const { appointments, error: apptError, refresh: refreshAppts } = useAppointments()
   const { blocks, refresh: refreshBlocks } = useScheduleBlocks()
+  const { clients } = useClients()
 
   return (
     <div className="flex min-h-screen" style={{ background: '#F5F1EA', color: '#1C2A24' }}>
@@ -1241,7 +1265,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
           {view === 'leads'        && <LeadsView leads={leads} onSelect={setSelectedLead} />}
           {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} onBlocksChange={refreshBlocks} />}
           {view === 'appointments' && <AppointmentsView appointments={appointments} onStatusChange={refreshAppts} />}
-          {view === 'patients'     && <PatientsView appointments={appointments} />}
+          {view === 'patients'     && <PatientsView appointments={appointments} clients={clients} />}
         </div>
       </main>
 

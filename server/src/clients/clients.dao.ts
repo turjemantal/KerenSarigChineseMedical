@@ -7,6 +7,10 @@ import { Client, ClientDocument } from './client.schema';
 export class ClientsDao {
   constructor(@InjectModel(Client.name) private model: Model<ClientDocument>) {}
 
+  findAll(): Promise<ClientDocument[]> {
+    return this.model.find().sort({ createdAt: -1 }).exec();
+  }
+
   findByPhone(phone: string): Promise<ClientDocument | null> {
     return this.model.findOne({ phone }).exec();
   }

@@ -6,6 +6,7 @@ const existingClient = { _id: 'c1', phone: '0501234567', name: 'Alice', email: n
 const newClient     = { _id: 'c2', phone: '0509876543', name: undefined, email: null };
 
 const mockDao = {
+  findAll: jest.fn(),
   findByPhone: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
@@ -23,6 +24,15 @@ describe('ClientsService', () => {
     }).compile();
     service = module.get<ClientsService>(ClientsService);
     jest.clearAllMocks();
+  });
+
+  describe('findAll', () => {
+    it('returns all registered clients (for the admin patients screen)', async () => {
+      mockDao.findAll.mockResolvedValueOnce([existingClient, newClient]);
+      const result = await service.findAll();
+      expect(result).toHaveLength(2);
+      expect(mockDao.findAll).toHaveBeenCalled();
+    });
   });
 
   describe('findOrCreate', () => {

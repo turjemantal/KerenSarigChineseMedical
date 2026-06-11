@@ -6,6 +6,10 @@ import { ClientDocument } from './client.schema';
 export class ClientsService {
   constructor(private readonly dao: ClientsDao) {}
 
+  findAll(): Promise<ClientDocument[]> {
+    return this.dao.findAll();
+  }
+
   findByPhone(phone: string): Promise<ClientDocument | null> {
     return this.dao.findByPhone(phone);
   }
