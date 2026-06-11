@@ -22,7 +22,11 @@ services:
       - mongo
 
   client:
-    build: ./client
+    build:
+      context: ./client
+      args:
+        # Vite build-time config — compose reads the value from the root .env
+        VITE_MEDIA_BASE_URL: ${VITE_MEDIA_BASE_URL}
     container_name: keren-client
     restart: unless-stopped
     ports:

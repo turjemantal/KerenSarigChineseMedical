@@ -1,3 +1,18 @@
+import { MEDIA_BASE_URL } from './constants'
+
+// testimonial videos — hosted on the public media bucket (public read on /videos/* only)
+export interface TestimonialVideo {
+  src: string
+  poster: string
+}
+
+export const TESTIMONIAL_VIDEOS: TestimonialVideo[] = MEDIA_BASE_URL
+  ? [1, 2, 3].map(i => ({
+      src: `${MEDIA_BASE_URL}/videos/testimonial-${i}.mp4`,
+      poster: `${MEDIA_BASE_URL}/videos/poster-${i}.jpg`,
+    }))
+  : []
+
 export const TREATMENTS = [
   {
     id: 'women', name: 'בריאות האישה', chinese: '婦科', icon: 'Leaf',
@@ -30,11 +45,11 @@ export const TREATMENTS = [
 ]
 
 export const AREAS: Record<string, {
-  id: string; chinese: string; tag: string; title: string; intro: string;
+  id: string; chinese: string; tag: string; shortTag?: string; title: string; intro: string;
   items: { h: string; b: string }[]
 }> = {
   women: {
-    id: 'women', chinese: '婦', tag: 'בריאות האישה · פריון ולידה',
+    id: 'women', chinese: '婦', tag: 'בריאות האישה · פריון ולידה', shortTag: 'בריאות האישה',
     title: 'בריאות האישה — פריון ולידה',
     intro: 'במסגרת ההכשרה המקצועית שלי למדתי במסלול להתמחות בבריאות האישה והוסמכתי בתחום.',
     items: [
@@ -72,6 +87,17 @@ export const AREAS: Record<string, {
       { h: 'פתולוגיות כרוניות', b: 'קרוהן, מעי רגיז ודלקות בוושט ובקיבה — הרפואה הסינית מציעה דרכי טיפול יעילות.' },
       { h: 'תסמינים יומיומיים', b: 'עצירות, שלשולים, כאבי בטן ונפיחות בטנית נעלמים לאחר מספר טיפולים.' },
       { h: 'השפעה על מערכות אחרות', b: 'עצירות עשויה להשפיע על מערכות אחרות — כאבי גב ומיגרנות נעלמים לעיתים כאשר מערכת העיכול מתאזנת.' },
+    ],
+  },
+  aesthetic: {
+    id: 'aesthetic', chinese: '美', tag: 'רפואה סינית אסתטית',
+    title: 'רפואה סינית אסתטית — דיקור קוסמטי',
+    intro: 'מחטי ההרמה בדיקור קוסמטי הן הדרך הטבעית והיעילה להדק את קווי המתאר של הפנים, להפחית קמטוטים ולשקם את האלסטיות של העור — מבפנים החוצה.',
+    items: [
+      { h: 'הטיפול מתחיל בפינוק', b: 'עיסוי פנים מפנק, בשילוב טכניקות של כוסות רוח עדינות וגוואשה, שמעוררות את העור ומגבירות את זרימת הדם.' },
+      { h: 'מחטי ההרמה', b: 'דקות, מדויקות וטבעיות לחלוטין — מחטי ההרמה מעודדות את העור לייצר קולגן, ממצקות, מרימות ומחליקות קמטוטים.' },
+      { h: 'בלי חומרים זרים', b: 'התוצאה מושגת ללא חומרים זרים, בלי ניתוח ובלי זמן החלמה — חיזוק והצערה של העור בדרך טבעית לחלוטין.' },
+      { h: 'זה לא קסם — זו הרפואה הסינית', b: 'הידוק קווי המתאר, הפחתת קמטוטים ושיקום אלסטיות העור, מתוך הבנה עמוקה של זרימת האנרגיה בגוף.' },
     ],
   },
 }

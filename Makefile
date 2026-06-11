@@ -28,10 +28,13 @@ deploy: push-images restart-prod
 	@echo "✅ Production deploy complete — https://kerensarig.co.il"
 
 # Step 1: build server+client for linux/amd64 and push to ECR
+# (client gets build-time Vite vars from the root .env)
 push-images:
 	aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin $(ECR)
 	docker buildx build --platform linux/amd64 -t $(ECR)/keren-server:latest --push ./server
-	docker buildx build --platform linux/amd64 -t $(ECR)/keren-client:latest --push ./client
+	docker buildx build --platform linux/amd64 \
+		--build-arg VITE_MEDIA_BASE_URL=$$(grep '^VITE_MEDIA_BASE_URL=' .env | cut -d= -f2-) \
+		-t $(ECR)/keren-client:latest --push ./client
 
 # Step 2: pull the latest images on EC2 and restart the stack
 restart-prod:

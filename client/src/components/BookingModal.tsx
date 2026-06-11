@@ -3,7 +3,7 @@ import { Enso, Chop, Button, Label, FormField } from './shared'
 import { Icon } from './icons'
 import { getClient, getToken, saveAuth, authHeader } from '../auth'
 import type { ClientProfile } from '../auth'
-import { SLOT_PERIODS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLOSED_WEEKDAYS } from '../constants'
+import { SLOT_PERIODS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLOSED_WEEKDAYS, CLINIC_CONTACT } from '../constants'
 import type { PublicScheduleBlock } from '../constants'
 
 // ── types ──────────────────────────────────────────────────────────────────────
@@ -527,7 +527,7 @@ function StepConfirm({ data, client }: { data: BookingData; client: ClientProfil
         <div className="mt-5 pt-5 space-y-1" style={{ borderTop: '1px solid rgba(28,42,36,0.1)', fontSize: 13, color: '#4A6B5C' }}>
           <div className="flex items-center gap-2"><Icon.Users s={13} /> {client?.name || data.name}</div>
           <div className="flex items-center gap-2"><Icon.Phone s={13} /> <span style={{ direction: 'ltr' }}>{client?.phone}</span></div>
-          <div className="flex items-center gap-2"><Icon.Pin s={13} /> מזכרת בתיה</div>
+          <div className="flex items-center gap-2"><Icon.Pin s={13} /> {CLINIC_CONTACT.address}</div>
           {data.concern && <div className="mt-2" style={{ color: '#2A3D34' }}>״{data.concern}״</div>}
         </div>
       </div>

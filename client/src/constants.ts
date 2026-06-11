@@ -47,6 +47,10 @@ export const PHONE_REGEX = /^05\d{8}$/
 // weekdays the clinic is closed (0=Sunday … 6=Saturday) — mirrors server CLOSED_WEEKDAYS
 export const CLOSED_WEEKDAYS: number[] = [6]
 
+// public media bucket (S3) — configured via VITE_MEDIA_BASE_URL in the root .env;
+// empty value gracefully hides media that depends on it (e.g. testimonial videos)
+export const MEDIA_BASE_URL: string = import.meta.env.VITE_MEDIA_BASE_URL ?? ''
+
 // clinic contact + social profiles — single source for nav, footer, and legal pages
 export const CLINIC_CONTACT = {
   phone: '050-9031503',

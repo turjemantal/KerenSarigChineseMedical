@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Enso, Button, Avatar } from './shared'
 import { Icon } from './icons'
-import { AREAS } from '../data'
+import { AREAS, TESTIMONIAL_VIDEOS } from '../data'
 import { SOCIAL_LINKS, CLINIC_CONTACT } from '../constants'
 
 function SocialIconLink({ id, label, href, icon, size = 34, plain = false }: { id: string; label: string; href: string; icon: string; size?: number; plain?: boolean }) {
@@ -223,16 +223,34 @@ function Approach() {
         </div>
         <div className="grid md:grid-cols-4 gap-0" style={{ borderTop: '1px solid rgba(245,241,234,0.15)' }}>
           {pillars.map((s, i) => (
-            <div key={s.n} className="py-8 md:py-10 pl-6" style={{
+            <div key={s.n} className="py-8 md:py-10 md:pl-6" style={{
               borderBottom: '1px solid rgba(245,241,234,0.15)',
               borderLeft: i < pillars.length - 1 ? '1px solid rgba(245,241,234,0.15)' : 'none',
-              paddingRight: i === 0 ? 0 : 24,
             }}>
-              <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 14, color: '#C4634A', letterSpacing: '0.1em' }}>{s.n}</div>
-              <h3 className="mt-3" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22, fontWeight: 400 }}>{s.title}</h3>
-              <p className="mt-3" style={{ fontSize: 14.5, lineHeight: 1.75, color: '#D8D0BF' }}>{s.body}</p>
+              <div className={i === 0 ? '' : 'md:pr-6'}>
+                <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 14, color: '#C4634A', letterSpacing: '0.1em' }}>{s.n}</div>
+                <h3 className="mt-3" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22, fontWeight: 400 }}>{s.title}</h3>
+                <p className="mt-3" style={{ fontSize: 14.5, lineHeight: 1.75, color: '#D8D0BF' }}>{s.body}</p>
+              </div>
             </div>
           ))}
+        </div>
+
+        {/* המרקחת הסינית — צמחי מרפא ופטריות מרפא */}
+        <div className="mt-12 md:mt-16 grid md:grid-cols-12 gap-6 md:gap-8 items-center p-7 md:p-10" style={{ border: '1px solid rgba(245,241,234,0.18)', borderRadius: 2, background: 'rgba(245,241,234,0.03)' }}>
+          <div className="md:col-span-2 flex md:justify-center">
+            <span aria-hidden style={{ fontFamily: "'Noto Serif SC', serif", fontSize: 76, lineHeight: 1, color: '#C4634A', opacity: 0.9 }}>藥</span>
+          </div>
+          <div className="md:col-span-10">
+            <div style={{ fontSize: 11.5, letterSpacing: '0.22em', color: '#B8C5B8' }}>— המרקחת הסינית</div>
+            <h3 className="mt-2" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 26, fontWeight: 400 }}>צמחי מרפא ופטריות מרפא</h3>
+            <p className="mt-3" style={{ fontSize: 15, lineHeight: 1.8, color: '#D8D0BF', maxWidth: 720 }}>
+              לצד הדיקור והמגע, אני משלבת בטיפול פורמולות אישיות של צמחי מרפא סיניים ופטריות מרפא —
+              ובהן ריישי וקורדיספס — הנמצאות בשימוש ברפואה הסינית למעלה מ-2,000 שנה.
+              הפורמולה נבנית בהתאמה אישית לאבחנה, ומסייעת בשלל בעיות: חיזוק מערכת החיסון, איזון הורמונלי,
+              שיפור השינה ורמות האנרגיה, תמיכה בעיכול ובהתמודדות עם סטרס — וממשיכה לעבוד עבורך גם בין הטיפולים.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -250,21 +268,27 @@ function Areas() {
         <div className="flex items-end justify-between flex-wrap gap-6 mb-14">
           <div className="max-w-[640px]">
             <div style={{ fontSize: 11.5, letterSpacing: '0.22em', color: '#4A6B5C' }}>— תחומי טיפול</div>
-            <h2 className="mt-4" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontWeight: 400, fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>ארבעה תחומים עיקריים.</h2>
+            <h2 className="mt-4" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontWeight: 400, fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>חמישה תחומים עיקריים.</h2>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 mb-10">
-          {list.map(a => (
-            <button key={a.id} onClick={() => setActive(a.id)} className="flex items-center gap-3 px-5 py-3 transition-all" style={{
-              background: active === a.id ? '#1C2A24' : '#FFFFFF',
-              color: active === a.id ? '#F5F1EA' : '#1C2A24',
-              border: `1px solid ${active === a.id ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`,
-              borderRadius: 2,
-            }}>
-              <span style={{ fontFamily: "'Noto Serif SC', serif", fontSize: 18, opacity: 0.6 }}>{a.chinese}</span>
-              <span style={{ fontSize: 13.5, fontWeight: 500 }}>{a.tag}</span>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 mb-10">
+          {list.map((a, i) => {
+            const lastOdd = list.length % 2 === 1 && i === list.length - 1
+            return (
+              <button key={a.id} onClick={() => setActive(a.id)}
+                className={`flex items-center justify-center md:justify-start gap-2 md:gap-3 px-3 md:px-5 py-3 transition-all ${lastOdd ? 'col-span-2 md:col-auto' : ''}`}
+                style={{
+                  background: active === a.id ? '#1C2A24' : '#FFFFFF',
+                  color: active === a.id ? '#F5F1EA' : '#1C2A24',
+                  border: `1px solid ${active === a.id ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`,
+                  borderRadius: 2,
+                }}>
+                <span style={{ fontFamily: "'Noto Serif SC', serif", fontSize: 18, opacity: 0.6 }}>{a.chinese}</span>
+                <span className="md:hidden" style={{ fontSize: 13.5, fontWeight: 500, whiteSpace: 'nowrap' }}>{a.shortTag || a.tag}</span>
+                <span className="hidden md:inline" style={{ fontSize: 13.5, fontWeight: 500, whiteSpace: 'nowrap' }}>{a.tag}</span>
+              </button>
+            )
+          })}
         </div>
         <div key={current.id} className="view-enter grid md:grid-cols-12 gap-10" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
           <div className="md:col-span-5 p-8 md:p-10 relative" style={{ background: '#1C2A24', color: '#F5F1EA', borderRadius: 2 }}>
@@ -291,20 +315,52 @@ function Areas() {
 
 // ---------- וידאו (YouTube) ----------
 // ---------- המלצות ----------
+function TestimonialVideo({ src, poster }: { src: string; poster: string }) {
+  const [playing, setPlaying] = useState(false)
+  const ref = useRef<HTMLVideoElement>(null)
+  const start = () => { setPlaying(true); void ref.current?.play() }
+  return (
+    <div className="relative overflow-hidden group"
+      style={{ aspectRatio: '9/16', background: '#1C2A24', borderRadius: 2, border: '1px solid rgba(28,42,36,0.12)', boxShadow: '0 6px 24px rgba(28,42,36,0.12)' }}>
+      <video ref={ref} src={src} poster={poster} preload="metadata" playsInline controls={playing}
+        className="absolute inset-0 w-full h-full" style={{ objectFit: 'cover' }} />
+      {!playing && (
+        <button onClick={start} className="absolute inset-0 w-full h-full" aria-label="ניגון סרטון המלצה">
+          <span className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(28,42,36,0.02), rgba(28,42,36,0.38))' }} />
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="flex items-center justify-center transition-transform group-hover:scale-110"
+              style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(245,241,234,0.95)', boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#1C2A24" style={{ marginRight: 3 }}><path d="M8 5 L8 19 L20 12 Z" /></svg>
+            </span>
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Stories() {
   return (
     <section id="stories" style={{ background: '#F5F1EA' }}>
       <div className="max-w-[1240px] mx-auto px-6 md:px-10 py-24 md:py-32">
         <div className="mb-12">
-          <div style={{ fontSize: 11.5, letterSpacing: '0.22em', color: '#4A6B5C' }}>— מטופלות משתפות</div>
-          <h2 className="mt-4" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontWeight: 400, fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>מטופלות משתפות.</h2>
+          <div style={{ fontSize: 11.5, letterSpacing: '0.22em', color: '#4A6B5C' }}>— מטופלים משתפים</div>
+          <h2 className="mt-4" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontWeight: 400, fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>מטופלים משתפים.</h2>
         </div>
-        <div className="flex items-center justify-center text-center p-10" style={{ minHeight: 220, background: '#FFFFFF', border: '1px dashed rgba(28,42,36,0.25)', borderRadius: 2 }}>
-          <div style={{ maxWidth: 520 }}>
-            <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22, color: '#1C2A24' }}>מקום להמלצות אמיתיות</div>
-            <div className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.7 }}>אשמח לקבל ממך את הטקסטים והצילומים של ההמלצות — ונשבץ כאן.</div>
+        {TESTIMONIAL_VIDEOS.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-[440px] sm:max-w-[900px] mx-auto">
+            {TESTIMONIAL_VIDEOS.map(v => (
+              <TestimonialVideo key={v.src} src={v.src} poster={v.poster} />
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center justify-center text-center p-10" style={{ minHeight: 220, background: '#FFFFFF', border: '1px dashed rgba(28,42,36,0.25)', borderRadius: 2 }}>
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22, color: '#1C2A24' }}>מקום להמלצות אמיתיות</div>
+              <div className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.7 }}>אשמח לקבל ממך את הטקסטים והצילומים של ההמלצות — ונשבץ כאן.</div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )

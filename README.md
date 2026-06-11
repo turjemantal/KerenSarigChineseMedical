@@ -50,7 +50,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (104 tests) |
+| **Testing** | Jest + ts-jest (150 tests) |
 
 ---
 
@@ -60,34 +60,47 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 kerenWebsite/
 ├── client/                        # React + Vite frontend
 │   ├── src/
-│   │   ├── components/            # Landing, BookingModal, Dashboard, ClientPortal…
-│   │   └── auth.ts                # Token storage helpers
+│   │   ├── components/
+│   │   │   ├── Landing.tsx        # Public site (nav, hero, areas, testimonials…)
+│   │   │   ├── BookingModal.tsx   # OTP login + 4-step booking flow
+│   │   │   ├── ContactModal.tsx   # Lead capture form
+│   │   │   ├── ClientPortal.tsx   # Client appointments + cancellation
+│   │   │   ├── Dashboard.tsx      # Admin: today, calendar, blocks, appointments…
+│   │   │   ├── AdminLogin.tsx     # Admin password login
+│   │   │   ├── Legal.tsx          # Accessibility statement + privacy policy pages
+│   │   │   ├── icons.tsx          # Shared SVG icon set
+│   │   │   └── shared.tsx         # Button (incl. pill), Enso, Avatar, form helpers
+│   │   ├── constants.ts           # Statuses, labels, slots, contact, UI errors, media URL
+│   │   ├── data.ts                # Treatment areas content + testimonial videos
+│   │   ├── auth.ts                # Token storage helpers
+│   │   └── vite-env.d.ts          # Typed VITE_* env vars
 │   ├── nginx.conf                 # Proxies /api → server:3001 in Docker
-│   └── Dockerfile
-├── server/                        # NestJS backend
+│   └── Dockerfile                 # Accepts VITE_* build args
+├── server/                        # NestJS backend (controller → manager → service → DAO)
 │   ├── src/
 │   │   ├── config/                # Env-var config + Joi startup validation
 │   │   ├── common/
-│   │   │   ├── constants/         # Messages, OTP timing, clinic defaults
-│   │   │   ├── enums/             # AppEnv, MessagingProvider, statuses
-│   │   │   └── utils/             # Date formatting, phone normalisation
-│   │   ├── auth/                  # OTP flow, JWT strategy, guards
-│   │   ├── appointments/          # Booking, availability, reminders
+│   │   │   ├── constants/         # Messages, errors, validation, clinic defaults
+│   │   │   ├── enums/             # AppEnv, statuses, UserRole, Weekday…
+│   │   │   ├── pipes/             # Joi validation pipe
+│   │   │   └── utils/             # Clinic-timezone dates, phone normalisation
+│   │   ├── auth/                  # OTP flow, JWT strategy, admin guard
+│   │   ├── appointments/          # Booking rules, approval flow, availability, reminders
+│   │   ├── schedule-blocks/       # Closed hours / days / vacations
 │   │   ├── leads/                 # Enquiry capture and pipeline
-│   │   ├── clients/               # Client profiles
+│   │   ├── clients/               # Registered clients (+ admin listing)
 │   │   └── integrations/
 │   │       ├── messaging/         # IMessagingProvider interface + DI token
-│   │       ├── sms/               # Twilio SMS implementation
+│   │       ├── sms/               # Twilio (API-key auth) implementation
 │   │       └── whatsapp/          # WhatsApp Cloud API implementation
+│   ├── scripts/                   # test-sms.ts — one-off SMS smoke test
+│   ├── tests/                     # Jest unit tests
 │   └── Dockerfile
-├── scripts/
-│   ├── clean-db.sh                # Drop database
-│   ├── seed-db.sh                 # Seed sample data
-│   ├── backup-db.sh               # Export to archive
-│   └── restore-db.sh              # Restore from archive
+├── scripts/                       # Local DB: clean / seed / backup / restore
 ├── docker-compose.yml             # Local development (includes MongoDB)
-├── docker-compose.prod.yml        # Production (uses ECR images + Atlas)
-├── Makefile                       # Shortcuts for common tasks
+├── docker-compose.prod.yml        # Production (ECR images + Atlas + certbot)
+├── nginx.conf                     # Production HTTPS reverse-proxy config
+├── Makefile                       # make deploy, prod-ip, prod-logs, db-*…
 └── .env.example                   # Template for environment variables
 ```
 
@@ -165,6 +178,12 @@ Copy `.env.example` to `.env` and fill in values. The server **will not start** 
 | Variable | Description |
 |---|---|
 | `MESSAGING_PROVIDER` | `sms` (Twilio) or `whatsapp` — default: `whatsapp` |
+
+### Media
+
+| Variable | Description |
+|---|---|
+| `VITE_MEDIA_BASE_URL` | Public S3 media bucket URL (testimonial videos). Baked into the client at **build time** |
 
 See [Messaging Providers](#messaging-providers) for provider-specific variables.
 
