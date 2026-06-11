@@ -344,7 +344,7 @@ function Stories() {
     <section id="stories" style={{ background: '#F5F1EA' }}>
       <div className="max-w-[1240px] mx-auto px-6 md:px-10 py-24 md:py-32">
         <div className="mb-12">
-          <div style={{ fontSize: 11.5, letterSpacing: '0.22em', color: '#4A6B5C' }}>— מטופלים משתפים</div>
+          <div style={{ fontSize: 11.5, letterSpacing: '0.22em', color: '#4A6B5C' }}>— המלצות</div>
           <h2 className="mt-4" style={{ fontFamily: "'Frank Ruhl Libre', serif", fontWeight: 400, fontSize: 'clamp(36px, 4vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>מטופלים משתפים.</h2>
         </div>
         {TESTIMONIAL_VIDEOS.length > 0 ? (
