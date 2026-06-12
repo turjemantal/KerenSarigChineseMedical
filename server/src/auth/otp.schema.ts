@@ -12,6 +12,9 @@ export class Otp {
   @Prop({ required: true })
   code: string;
 
+  @Prop({ default: () => new Date() })
+  createdAt: Date;
+
   @Prop({ default: () => new Date(Date.now() + OTP_EXPIRY_MS) })
   expiresAt: Date;
 }

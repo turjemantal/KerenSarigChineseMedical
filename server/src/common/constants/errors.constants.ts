@@ -48,6 +48,10 @@ export const ERRORS = {
   TIME_IN_PAST: 'לא ניתן לקבוע תור לשעה שכבר עברה',
   CLOSED_WEEKDAY: 'הקליניקה סגורה ביום זה',
 
+  // rate limiting
+  OTP_COOLDOWN: 'כבר נשלח קוד למספר זה. המתינו רגע לפני בקשת קוד חדש.',
+  OTP_DAILY_LIMIT: 'נשלחו יותר מדי קודים למספר זה. נסו שוב מאוחר יותר או צרו קשר טלפוני.',
+
   // auth
   WRONG_PASSWORD: 'סיסמה שגויה',
   INVALID_OR_EXPIRED_OTP: 'Invalid or expired OTP',

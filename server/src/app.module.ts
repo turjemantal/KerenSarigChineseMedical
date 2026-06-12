@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { LoggingThrottlerGuard } from './common/guards/logging-throttler.guard';
 import { LeadsModule } from './leads/leads.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { ScheduleBlocksModule } from './schedule-blocks/schedule-blocks.module';
@@ -15,7 +16,13 @@ import { config } from './config';
   imports: [
     MongooseModule.forRoot(config.mongodbUri),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
+    // Named throttlers: a per-minute and a per-hour window, both keyed by client IP.
+    // The global defaults are generous; sensitive routes (e.g. OTP) tighten them
+    // via @Throttle. Requires `trust proxy` (see main.ts) to see the real IP.
+    ThrottlerModule.forRoot([
+      { name: 'minute', ttl: 60_000, limit: 60 },
+      { name: 'hour', ttl: 3_600_000, limit: 1000 },
+    ]),
     MessagingModule,
     LeadsModule,
     AppointmentsModule,
@@ -23,6 +30,6 @@ import { config } from './config';
     ClientsModule,
     AuthModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: LoggingThrottlerGuard }],
 })
 export class AppModule {}

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from '../src/auth/auth.service';
 import { Otp } from '../src/auth/otp.schema';
 import { ClientsService } from '../src/clients/clients.service';
@@ -12,11 +12,15 @@ import { AdminLoginDto } from '../src/auth/dto/admin-login.dto';
 import { UpdateNameDto } from '../src/auth/dto/update-name.dto';
 
 const validPhone = '0501234567';
-const mockOtp = { phone: validPhone, code: '123456', expiresAt: new Date(Date.now() + 60_000) };
+const mockOtp = { phone: validPhone, code: '123456', createdAt: new Date(Date.now() - 60_000), expiresAt: new Date(Date.now() + 60_000) };
 const mockClient = { _id: 'c1', phone: validPhone, name: 'Test User', email: null };
 
+// helper: make otpModel.find(...).sort(...).exec() resolve to the given send history
+const mockSendHistory = (docs: { createdAt: Date }[]) =>
+  mockOtpModel.find.mockReturnValueOnce({ sort: () => ({ exec: jest.fn().mockResolvedValue(docs) }) });
 
 const mockOtpModel = {
+  find: jest.fn(),
   deleteMany: jest.fn(),
   create: jest.fn(),
   findOne: jest.fn(),
@@ -53,34 +57,42 @@ describe('AuthService', () => {
   });
 
   describe('requestOtp', () => {
-    it('deletes existing OTPs and creates a new one for a valid phone', async () => {
-      mockOtpModel.deleteMany.mockResolvedValueOnce({});
+    it('creates a new OTP for a valid phone with no recent sends', async () => {
+      mockSendHistory([]);
       mockOtpModel.create.mockResolvedValueOnce(mockOtp);
-      const dto: RequestOtpDto = { phone: validPhone };
-      const result = await service.requestOtp(dto);
-      expect(mockOtpModel.deleteMany).toHaveBeenCalledWith({ phone: validPhone });
+      const result = await service.requestOtp({ phone: validPhone });
       expect(mockOtpModel.create).toHaveBeenCalled();
       expect(result).toEqual({ message: 'OTP sent' });
     });
 
-    it('replaces any prior OTP with a fresh one on repeat requests', async () => {
-      mockOtpModel.deleteMany.mockResolvedValue({});
-      mockOtpModel.create.mockResolvedValue(mockOtp);
-      const dto: RequestOtpDto = { phone: validPhone };
-      await service.requestOtp(dto);
-      await service.requestOtp(dto);
-      expect(mockOtpModel.deleteMany).toHaveBeenCalledTimes(2);
-      expect(mockOtpModel.create).toHaveBeenCalledTimes(2);
-    });
-
     it('sends the OTP code via messaging service', async () => {
-      mockOtpModel.deleteMany.mockResolvedValueOnce({});
+      mockSendHistory([]);
       mockOtpModel.create.mockResolvedValueOnce(mockOtp);
       await service.requestOtp({ phone: validPhone });
       expect(mockMessagingService.sendOtp).toHaveBeenCalledWith(
         validPhone,
         expect.stringMatching(/^\d+$/),
       );
+    });
+
+    it('blocks a resend during the cooldown (too soon after the last code)', async () => {
+      mockSendHistory([{ createdAt: new Date(Date.now() - 5_000) }]); // 5s ago
+      await expect(service.requestOtp({ phone: validPhone })).rejects.toThrow(HttpException);
+      expect(mockOtpModel.create).not.toHaveBeenCalled();
+      expect(mockMessagingService.sendOtp).not.toHaveBeenCalled();
+    });
+
+    it('allows a resend once the cooldown has passed', async () => {
+      mockSendHistory([{ createdAt: new Date(Date.now() - 2 * 60_000) }]); // 2 min ago
+      mockOtpModel.create.mockResolvedValueOnce(mockOtp);
+      await expect(service.requestOtp({ phone: validPhone })).resolves.toEqual({ message: 'OTP sent' });
+    });
+
+    it('blocks sending once the per-phone daily cap is reached', async () => {
+      const old = { createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000) }; // 3h ago — past cooldown
+      mockSendHistory([old, old, old, old, old]); // 5 sends == cap
+      await expect(service.requestOtp({ phone: validPhone })).rejects.toThrow(HttpException);
+      expect(mockMessagingService.sendOtp).not.toHaveBeenCalled();
     });
   });
 

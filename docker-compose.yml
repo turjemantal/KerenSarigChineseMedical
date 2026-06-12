@@ -7,6 +7,10 @@ services:
       - mongo_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: keren-clinic
+    # rotate logs so they never fill the disk (3 files × 10MB per container)
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   server:
     build: ./server
@@ -20,6 +24,9 @@ services:
       MONGODB_URI: mongodb://mongo:27017/keren-clinic
     depends_on:
       - mongo
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   client:
     build:
@@ -33,6 +40,9 @@ services:
       - "80:80"
     depends_on:
       - server
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   mongo_data:

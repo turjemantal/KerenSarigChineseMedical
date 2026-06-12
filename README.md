@@ -31,6 +31,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **Client portal** — authenticated clients view and cancel their appointments
 - **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
 - **Automated reminders** — cron job at 09:00 sends reminders for next-day appointments
+- **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection); request & rate-limit logging with rotation
 - **Legal pages** — accessibility statement (`/accessibility`) and privacy policy (`/privacy`) per Israeli law (תקנה 35; חוק הגנת הפרטיות incl. Amendment 13)
 
 ---
@@ -83,6 +84,8 @@ kerenWebsite/
 │   │   │   ├── constants/         # Messages, errors, validation, clinic defaults
 │   │   │   ├── enums/             # AppEnv, statuses, UserRole, Weekday…
 │   │   │   ├── pipes/             # Joi validation pipe
+│   │   │   ├── guards/            # Logging throttler (rate-limit + logs)
+│   │   │   ├── interceptors/      # HTTP request logging
 │   │   │   └── utils/             # Clinic-timezone dates, phone normalisation
 │   │   ├── auth/                  # OTP flow, JWT strategy, admin guard
 │   │   ├── appointments/          # Booking rules, approval flow, availability, reminders

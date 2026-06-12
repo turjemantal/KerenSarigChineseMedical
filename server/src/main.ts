@@ -10,6 +10,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { config } from './config';
 import { envSchema } from './config/env.validation';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 const { error } = envSchema.validate(process.env);
 if (error) {
@@ -19,9 +20,14 @@ if (error) {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Behind nginx: trust exactly one proxy hop so req.ip is the real client IP
+  // (read from X-Forwarded-For, which nginx overwrites with the true remote_addr).
+  // Without this, per-IP rate limiting sees only nginx's IP and is useless.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({ origin: config.clientUrl });
   app.setGlobalPrefix('api');
+  app.useGlobalInterceptors(new LoggingInterceptor());
   await app.listen(config.port, '0.0.0.0');
 }
 void bootstrap();
