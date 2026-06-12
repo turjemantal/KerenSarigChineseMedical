@@ -26,9 +26,16 @@ export const loggerConfig: Params = {
       return id;
     },
     autoLogging: true,
-    // never log headers/cookies/bodies — only the safe request shape
+    // never log headers/cookies/bodies — only the safe request shape.
+    // prefer req.ip (Express + trust proxy = real client IP) over the raw socket
+    // address, which behind nginx is just the proxy's internal Docker IP.
     serializers: {
-      req: (req) => ({ id: req.id, method: req.method, url: req.url, ip: req.remoteAddress }),
+      req: (req) => ({
+        id: req.id,
+        method: req.method,
+        url: req.url,
+        ip: req.raw?.ip ?? req.remoteAddress,
+      }),
       res: (res) => ({ statusCode: res.statusCode }),
     },
     redact: {
