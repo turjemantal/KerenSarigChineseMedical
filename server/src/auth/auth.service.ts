@@ -15,14 +15,12 @@ import {
 } from '../common/constants/otp.constants';
 import { ERRORS, Entity, notFoundMessage } from '../common/constants/errors.constants';
 import { UserRole } from '../common/enums/user-role.enum';
+import { maskPhone } from '../common/utils/phone.utils';
 import { config } from '../config';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { UpdateNameDto } from './dto/update-name.dto';
-
-// mask a phone in logs: 0501234567 → 050***4567 (never log full numbers)
-const maskPhone = (p: string): string => (p.length < 7 ? '***' : `${p.slice(0, 3)}***${p.slice(-4)}`);
 
 @Injectable()
 export class AuthService {

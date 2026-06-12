@@ -12,6 +12,7 @@ import { ERRORS } from '../common/constants/errors.constants';
 import { CLOSED_WEEKDAYS } from '../common/constants/defaults.constants';
 import { config } from '../config';
 import { clinicToday, clinicTimeNow, weekdayOf } from '../common/utils/date.utils';
+import { maskPhone } from '../common/utils/phone.utils';
 
 @Injectable()
 export class AppointmentsManager {
@@ -27,11 +28,21 @@ export class AppointmentsManager {
     this.assertBookable(dto.date, dto.time);
     await this.assertNotBlocked(dto.date, dto.time);
     const appt = await this.service.create(dto);
-    void this.messaging.sendBookingRequestReceived(appt.phone, appt.name, appt.date, appt.time);
+    const id = String(appt._id);
+    this.logger.log(
+      `[Appointment] booked appt=${id} phone=${maskPhone(appt.phone)} ${appt.date} ${appt.time} status=${appt.status}`,
+    );
+    this.notify('request-received', id, this.messaging.sendBookingRequestReceived(appt.phone, appt.name, appt.date, appt.time));
     if (config.adminPhone) {
-      void this.messaging.sendNewBookingAlert(config.adminPhone, appt.name, appt.date, appt.time);
+      this.notify('admin-alert', id, this.messaging.sendNewBookingAlert(config.adminPhone, appt.name, appt.date, appt.time));
     }
     return appt;
+  }
+
+  // fire-and-forget messaging, but log the outcome tied to the appointment id
+  private notify(kind: string, apptId: string, p: Promise<void>): void {
+    p.then(() => this.logger.log(`[Appointment] sms=${kind} sent appt=${apptId}`))
+      .catch((e) => this.logger.error(`[Appointment] sms=${kind} FAILED appt=${apptId}: ${e}`));
   }
 
   getAll(): Promise<AppointmentDocument[]> {
@@ -53,16 +64,21 @@ export class AppointmentsManager {
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
     const existing = await this.service.findById(id);
     const updated = await this.service.update(id, dto);
+    if (dto.status && dto.status !== existing.status) {
+      this.logger.log(`[Appointment] status appt=${id} ${existing.status} → ${updated.status}`);
+    }
     const approved =
       existing.status === AppointmentStatus.PENDING && updated.status === AppointmentStatus.SCHEDULED;
     if (approved) {
-      void this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time);
+      this.logger.log(`[Appointment] approved appt=${id} phone=${maskPhone(updated.phone)}`);
+      this.notify('confirmation', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
     }
     return updated;
   }
 
-  remove(id: string): Promise<void> {
-    return this.service.delete(id);
+  async remove(id: string): Promise<void> {
+    await this.service.delete(id);
+    this.logger.log(`[Appointment] deleted appt=${id}`);
   }
 
   @Cron('0 9 * * *')
@@ -73,8 +89,10 @@ export class AppointmentsManager {
     this.logger.log(`[Reminders] Sending ${appointments.length} reminder(s) for ${tomorrow}`);
 
     for (const appt of appointments) {
+      const id = String(appt._id);
       await this.messaging.sendAppointmentReminder(appt.phone, appt.time);
-      await this.service.markReminderSent(String(appt._id));
+      await this.service.markReminderSent(id);
+      this.logger.log(`[Appointment] reminder sent appt=${id} phone=${maskPhone(appt.phone)} ${appt.time}`);
     }
   }
 
