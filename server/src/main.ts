@@ -6,11 +6,11 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
 import { NestFactory } from '@nestjs/core';
+import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { config } from './config';
 import { envSchema } from './config/env.validation';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 const { error } = envSchema.validate(process.env);
 if (error) {
@@ -19,7 +19,9 @@ if (error) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // bufferLogs so early startup logs also go through the structured pino logger
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
   // Behind nginx: trust exactly one proxy hop so req.ip is the real client IP
   // (read from X-Forwarded-For, which nginx overwrites with the true remote_addr).
   // Without this, per-IP rate limiting sees only nginx's IP and is useless.
@@ -27,7 +29,6 @@ async function bootstrap() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({ origin: config.clientUrl });
   app.setGlobalPrefix('api');
-  app.useGlobalInterceptors(new LoggingInterceptor());
   await app.listen(config.port, '0.0.0.0');
 }
 void bootstrap();

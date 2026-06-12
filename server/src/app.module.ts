@@ -3,7 +3,9 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
 import { LoggingThrottlerGuard } from './common/guards/logging-throttler.guard';
+import { loggerConfig } from './config/logger.config';
 import { LeadsModule } from './leads/leads.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { ScheduleBlocksModule } from './schedule-blocks/schedule-blocks.module';
@@ -14,6 +16,7 @@ import { config } from './config';
 
 @Module({
   imports: [
+    LoggerModule.forRoot(loggerConfig),
     MongooseModule.forRoot(config.mongodbUri),
     ScheduleModule.forRoot(),
     // Named throttlers: a per-minute and a per-hour window, both keyed by client IP.

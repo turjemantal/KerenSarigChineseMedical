@@ -37,6 +37,22 @@ services:
       - server
     logging: *default-logging
 
+  # Ships the server's structured logs to Better Stack (reads Docker stdout).
+  # Only runs meaningfully when BETTER_STACK_* are set in .env.
+  vector:
+    image: timberio/vector:0.40.0-debian
+    container_name: keren-vector
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # read container logs
+      - ./vector.yaml:/etc/vector/vector.yaml:ro        # shipping config
+    command: ["--config", "/etc/vector/vector.yaml"]
+    depends_on:
+      - server
+    logging: *default-logging
+
   # Renews the SSL certificate automatically (checks every 12h).
   certbot:
     image: certbot/certbot

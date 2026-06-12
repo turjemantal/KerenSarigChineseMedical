@@ -1,0 +1,37 @@
+# Vector — ships the NestJS server's Docker logs to Better Stack.
+# Decoupled by design: the app just writes JSON to stdout; Vector reads the
+# container's logs and forwards them. Secrets come from the environment.
+# Mounted into the vector container by docker-compose.prod.yml.
+
+sources:
+  app_logs:
+    type: docker_logs
+    # only the API container — nginx access logs are high-volume and not needed
+    include_containers:
+      - keren-server
+
+transforms:
+  # the app emits JSON per line; lift those fields to the top level so they are
+  # first-class in Better Stack (level, context, msg, req.*, etc.)
+  parse_json:
+    type: remap
+    inputs:
+      - app_logs
+    source: |
+      parsed, err = parse_json(.message)
+      if err == null {
+        . = merge(., object(parsed) ?? {})
+      }
+
+sinks:
+  better_stack:
+    type: http
+    inputs:
+      - parse_json
+    uri: "https://${BETTER_STACK_INGEST_HOST}/"
+    encoding:
+      codec: json
+    compression: gzip
+    auth:
+      strategy: bearer
+      token: "${BETTER_STACK_SOURCE_TOKEN}"

@@ -50,6 +50,12 @@ export const envSchema = Joi.object({
   ADMIN_PASSWORD: Joi.string().required(),
   ADMIN_PHONE: Joi.string().pattern(PHONE_REGEX).allow('').optional(),
 
+  // Logging
+  LOG_LEVEL: Joi.string().valid('fatal', 'error', 'warn', 'info', 'debug', 'trace').optional(),
+  // Better Stack log shipping (used by the Vector sidecar in prod) — optional
+  BETTER_STACK_SOURCE_TOKEN: optionalStr,
+  BETTER_STACK_INGEST_HOST: optionalStr,
+
   MESSAGING_PROVIDER: Joi.string().valid(...Object.values(MessagingProvider)).default(MessagingProvider.Whatsapp),
 
   TWILIO_ACCOUNT_SID:    requiredForSmsMatching(TWILIO_ACCOUNT_SID_REGEX),
