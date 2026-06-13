@@ -6,7 +6,6 @@ import { AuthService } from '../src/auth/auth.service';
 import { Otp } from '../src/auth/otp.schema';
 import { ClientsService } from '../src/clients/clients.service';
 import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
-import { RequestOtpDto } from '../src/auth/dto/request-otp.dto';
 import { VerifyOtpDto } from '../src/auth/dto/verify-otp.dto';
 import { AdminLoginDto } from '../src/auth/dto/admin-login.dto';
 import { UpdateNameDto } from '../src/auth/dto/update-name.dto';

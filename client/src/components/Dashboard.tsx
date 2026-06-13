@@ -116,6 +116,19 @@ function useExtraSlots() {
   return { extraSlots, refresh }
 }
 
+type WeekSchedule = Record<number, string[]>
+function useWeeklySchedule() {
+  const [schedule, setSchedule] = useState<WeekSchedule | null>(null)
+  const refresh = () => {
+    fetch('/api/weekly-schedule', { headers: adminAuthHeader() })
+      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<WeekSchedule> })
+      .then(setSchedule)
+      .catch(() => {})
+  }
+  useEffect(refresh, [])
+  return { schedule, refresh }
+}
+
 // ---------- Helpers ----------
 async function approveAppointment(id: string): Promise<boolean> {
   const res = await fetch(`/api/appointments/${id}/approve`, { method: 'PATCH', headers: adminAuthHeader() })
@@ -258,6 +271,7 @@ function TopBar({ view, onOpenNav }: { view: string; onOpenNav: () => void }) {
     calendar:     'יומן טיפולים',
     appointments: 'ניהול תורים',
     patients:     'מטופלים',
+    schedule:     'לוח שבועי קבוע',
   }
   return (
     <div className="px-6 md:px-10 py-5 flex items-center gap-4" style={{ borderBottom: '1px solid rgba(28,42,36,0.1)', background: '#F5F1EA' }}>
@@ -277,6 +291,7 @@ function Sidebar({ view, setView, onExit, open, onClose }: { view: string; setVi
     { id: 'calendar',     label: 'יומן',     icon: 'Calendar' },
     { id: 'appointments', label: 'תורים',    icon: 'Clock' },
     { id: 'patients',     label: 'מטופלים',  icon: 'Users' },
+    { id: 'schedule',     label: 'לוח שבועי', icon: 'Settings' },
   ]
   return (
     <>
@@ -1396,6 +1411,74 @@ function PatientsView({ appointments, clients }: { appointments: Appointment[]; 
   )
 }
 
+// ---------- WeeklyScheduleView (edit the recurring weekly hours) ----------
+const HEB_WEEKDAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+
+function WeeklyScheduleView({ schedule, onChange }: { schedule: WeekSchedule | null; onChange: () => void }) {
+  const [draft, setDraft] = useState<WeekSchedule | null>(schedule)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { setDraft(schedule) }, [schedule])
+  if (!draft) return <div className="p-6 md:p-10" style={{ color: '#4A6B5C', fontSize: 14 }}>טוען…</div>
+
+  const addTime = (wd: number, t: string) => { setSaved(false); setDraft(d => ({ ...d!, [wd]: Array.from(new Set([...(d![wd] || []), t])).sort() })) }
+  const removeTime = (wd: number, t: string) => { setSaved(false); setDraft(d => ({ ...d!, [wd]: (d![wd] || []).filter(x => x !== t) })) }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      for (let wd = 0; wd <= 6; wd++) {
+        await fetch(`/api/weekly-schedule/${wd}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
+          body: JSON.stringify({ times: draft[wd] || [] }),
+        })
+      }
+      onChange(); setSaved(true)
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="p-6 md:p-10 max-w-[760px]">
+      <p style={{ fontSize: 14, lineHeight: 1.7, color: '#2A3D34' }}>
+        זהו הלוח הקבוע שממנו מתחיל כל שבוע — השעות הפנויות לקביעת תור באתר. יום ללא שעות = סגור.
+        לפתיחת שעה חד-פעמית ביום מסוים, השתמשי ב<b>יומן ← ניהול זמינות</b>.
+      </p>
+      <div className="space-y-3 mt-6">
+        {HEB_WEEKDAYS.map((name, wd) => {
+          const times = draft[wd] || []
+          return (
+            <div key={wd} className="p-4" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+              <div className="flex items-center justify-between mb-3">
+                <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 17 }}>יום {name}</div>
+                {times.length === 0 && <span style={{ fontSize: 12, color: '#4A6B5C' }}>סגור</span>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {times.map(t => (
+                  <span key={t} className="flex items-center gap-2 px-3 h-8" style={{ background: '#EBE4D6', borderRadius: 99, fontSize: 13 }}>
+                    <span style={{ direction: 'ltr' }}>{t}</span>
+                    <button onClick={() => removeTime(wd, t)} style={{ color: '#C4634A', fontSize: 16, lineHeight: 1 }} aria-label="הסרה">×</button>
+                  </span>
+                ))}
+                <select value="" onChange={e => e.target.value && addTime(wd, e.target.value)}
+                  className="h-8 px-2" style={{ border: '1px dashed rgba(28,42,36,0.3)', borderRadius: 99, fontSize: 13, color: '#4A6B5C', background: 'transparent' }}>
+                  <option value="">+ הוסף שעה</option>
+                  {TIME_OPTIONS.filter(t => !times.includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-6 flex items-center gap-4">
+        <Button variant="primary" onClick={() => void save()} disabled={saving}>{saving ? 'שומר…' : 'שמירת לוח הזמנים'}</Button>
+        {saved && <span style={{ fontSize: 13, color: '#3A5C2A' }}>נשמר ✓</span>}
+      </div>
+    </div>
+  )
+}
+
 // ---------- Dashboard ----------
 export default function Dashboard({ onExit }: { onExit: () => void }) {
   const [view, setView] = useState('today')
@@ -1405,6 +1488,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const { appointments, error: apptError, refresh: refreshAppts } = useAppointments()
   const { blocks, refresh: refreshBlocks } = useScheduleBlocks()
   const { extraSlots, refresh: refreshExtraSlots } = useExtraSlots()
+  const { schedule, refresh: refreshSchedule } = useWeeklySchedule()
   const { clients } = useClients()
 
   return (
@@ -1424,6 +1508,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
           {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} extraSlots={extraSlots} onBlocksChange={refreshBlocks} onExtraChange={refreshExtraSlots} />}
           {view === 'appointments' && <AppointmentsView appointments={appointments} onStatusChange={refreshAppts} />}
           {view === 'patients'     && <PatientsView appointments={appointments} clients={clients} />}
+          {view === 'schedule'     && <WeeklyScheduleView schedule={schedule} onChange={refreshSchedule} />}
         </div>
       </main>
 

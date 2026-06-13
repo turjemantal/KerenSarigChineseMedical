@@ -14,6 +14,7 @@ export const ERRORS = {
   // formats
   INVALID_DATE_FORMAT: 'תאריך לא תקין — נדרש פורמט YYYY-MM-DD',
   INVALID_TIME_FORMAT: 'שעה לא תקינה — נדרש פורמט HH:MM',
+  INVALID_WEEKDAY: 'יום בשבוע לא תקין',
   INVALID_PHONE: 'מספר טלפון לא תקין — אנא הזינו מספר ישראלי תקין (05X-XXXXXXX)',
   INVALID_EMAIL: 'כתובת אימייל לא תקינה',
   INVALID_STATUS: 'סטטוס לא תקין',

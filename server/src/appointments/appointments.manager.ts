@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } f
 import { Cron } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 import { ScheduleBlocksManager } from '../schedule-blocks/schedule-blocks.manager';
+import { WeeklyScheduleManager } from '../weekly-schedule/weekly-schedule.manager';
 import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -12,7 +13,7 @@ import { ERRORS } from '../common/constants/errors.constants';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { config } from '../config';
 import { MAX_BOOKING_AHEAD_DAYS } from '../common/constants/schedule.constants';
-import { clinicToday, clinicTimeNow, eachDateInRange, addDays } from '../common/utils/date.utils';
+import { clinicToday, clinicTimeNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
 import { maskPhone } from '../common/utils/phone.utils';
 import { computeAvailableSlots } from './availability.util';
 
@@ -28,6 +29,7 @@ export class AppointmentsManager {
   constructor(
     private readonly service: AppointmentsService,
     private readonly scheduleBlocks: ScheduleBlocksManager,
+    private readonly weeklySchedule: WeeklyScheduleManager,
     @Inject(MESSAGING_PROVIDER) private readonly messaging: IMessagingProvider,
   ) {}
 
@@ -82,10 +84,11 @@ export class AppointmentsManager {
       throw new BadRequestException(ERRORS.dateRangeTooLarge(MAX_PUBLIC_RANGE_DAYS));
     }
 
-    const [appts, blocks, extras] = await Promise.all([
+    const [appts, blocks, extras, schedule] = await Promise.all([
       this.service.findBetween(from, to),
       this.scheduleBlocks.getBlocksInRange(from, to),
       this.scheduleBlocks.getExtraSlotsInRange(from, to),
+      this.weeklySchedule.getSchedule(),
     ]);
     const today = clinicToday();
     const nowTime = clinicTimeNow();
@@ -95,6 +98,7 @@ export class AppointmentsManager {
     for (const date of eachDateInRange(from, to)) {
       const slots = computeAvailableSlots({
         date,
+        baseTimes: schedule[weekdayOf(date)] ?? [],
         extraTimes: extras.filter(e => e.date === date).map(e => e.time),
         takenTimes: appts.filter(a => a.date === date).map(a => a.time),
         blocks: blocks.filter(b => date >= b.startDate && date <= b.endDate),

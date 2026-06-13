@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
 import { ScheduleBlocksManager } from '../src/schedule-blocks/schedule-blocks.manager';
+import { WeeklyScheduleManager } from '../src/weekly-schedule/weekly-schedule.manager';
 import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
@@ -42,6 +43,10 @@ const mockScheduleBlocks = {
   getExtraSlotsInRange: jest.fn(),
 };
 
+// empty base schedule by default — booking tests drive availability via extra slots
+const EMPTY_SCHEDULE = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+const mockWeeklySchedule = { getSchedule: jest.fn().mockResolvedValue(EMPTY_SCHEDULE) };
+
 const flushVoidPromises = () => new Promise(r => setTimeout(r, 0));
 
 // set up the data the availability computation reads (taken / blocks / extras)
@@ -62,11 +67,13 @@ describe('AppointmentsManager', () => {
         AppointmentsManager,
         { provide: AppointmentsService, useValue: mockService },
         { provide: ScheduleBlocksManager, useValue: mockScheduleBlocks },
+        { provide: WeeklyScheduleManager, useValue: mockWeeklySchedule },
         { provide: MESSAGING_PROVIDER, useValue: mockMessaging },
       ],
     }).compile();
     manager = module.get<AppointmentsManager>(AppointmentsManager);
     jest.clearAllMocks();
+    mockWeeklySchedule.getSchedule.mockResolvedValue(EMPTY_SCHEDULE);
   });
 
   describe('book', () => {

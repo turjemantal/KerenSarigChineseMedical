@@ -1,7 +1,3 @@
-import { Weekday } from '../common/enums/weekday.enum';
-import { WEEKLY_SCHEDULE } from '../common/constants/schedule.constants';
-import { weekdayOf } from '../common/utils/date.utils';
-
 export interface BlockLike {
   startDate: string;
   endDate: string;
@@ -21,6 +17,7 @@ function isBlocked(date: string, time: string, blocks: BlockLike[]): boolean {
 
 export interface AvailabilityInput {
   date: string;
+  baseTimes: string[]; // the weekly-schedule slots for this date's weekday
   extraTimes: string[]; // admin-opened extra slots for this date
   takenTimes: string[]; // booked (non-cancelled) times on this date
   blocks: BlockLike[]; // blocks covering this date
@@ -32,11 +29,10 @@ export interface AvailabilityInput {
 // The single source of truth for which slots are bookable on a date:
 //   base weekly schedule ∪ extra slots − taken − blocked − past − beyond horizon
 export function computeAvailableSlots(input: AvailabilityInput): string[] {
-  const { date, extraTimes, takenTimes, blocks, today, nowTime, maxDate } = input;
+  const { date, baseTimes, extraTimes, takenTimes, blocks, today, nowTime, maxDate } = input;
   if (date < today || date > maxDate) return [];
 
-  const base = WEEKLY_SCHEDULE[weekdayOf(date) as Weekday] ?? [];
-  const candidate = Array.from(new Set([...base, ...extraTimes])).sort();
+  const candidate = Array.from(new Set([...baseTimes, ...extraTimes])).sort();
   const taken = new Set(takenTimes);
 
   return candidate.filter(time => {
