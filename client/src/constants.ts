@@ -34,18 +34,8 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 
 export const APPOINTMENT_DURATION_MINUTES = 50
 
-// bookable slot grid, grouped by period of day
-export const SLOT_PERIODS: Record<string, string[]> = {
-  בוקר: ['09:00', '09:45', '10:30', '11:15'],
-  'אחה״צ': ['13:30', '14:15', '15:00', '15:45', '16:30'],
-  ערב: ['17:15', '18:00'],
-}
-
 // mirrors server PHONE_REGEX (validation.constants.ts)
 export const PHONE_REGEX = /^05\d{8}$/
-
-// weekdays the clinic is closed (0=Sunday … 6=Saturday) — mirrors server CLOSED_WEEKDAYS
-export const CLOSED_WEEKDAYS: number[] = [6]
 
 // public media bucket (S3) — configured via VITE_MEDIA_BASE_URL in the root .env;
 // empty value gracefully hides media that depends on it (e.g. testimonial videos)
@@ -90,5 +80,3 @@ export interface ExtraSlot {
   date: string
   time: string
 }
-
-export type PublicScheduleBlock = Omit<ScheduleBlock, '_id' | 'reason'>

@@ -697,7 +697,7 @@ function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtr
             <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: '#B8893B', borderRadius: 2, display: 'inline-block' }} />ממתין לאישור</span>
             <span className="flex items-center gap-1.5"><span style={{ width: 10, height: 10, background: 'rgba(28,42,36,0.25)', borderRadius: 2, display: 'inline-block' }} />חסום</span>
           </div>
-          <Button variant="primary" size="sm" onClick={() => setBlocksOpen(true)} className="w-full md:w-auto">חסימת זמן / חופשה</Button>
+          <Button variant="primary" size="sm" onClick={() => setBlocksOpen(true)} className="w-full md:w-auto">ניהול זמינות</Button>
         </div>
       </div>
 
