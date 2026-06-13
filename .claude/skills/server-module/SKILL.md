@@ -44,8 +44,19 @@ If a controller has an `if`, `throw`, `.map`, fetch-then-check, or data shaping:
 - Building entities from the request user → pass the user fields to the manager
   and let it resolve (e.g. name fallback).
 
+## Security checklist (every endpoint)
+
+- Mutating/admin routes carry an auth guard; public routes return only public data.
+- Re-validate on the server — never trust the client (e.g. booking re-checks
+  availability; ownership checks live in the manager).
+- Joi pipe on bodies; validate path/query params + ObjectIds in the manager/service
+  (malformed id → 404, not a 500).
+- Public range/list endpoints are bounded (e.g. `MAX_PUBLIC_RANGE_DAYS`).
+- Phones masked in logs (`maskPhone`); no secrets/PII logged or committed.
+
 ## Before you're done
 
 - `cd server && npx tsc --noEmit && npm test`
 - `npm --prefix client run build`
 - `make rebuild` and verify the running container (local + Docker, per CLAUDE.md)
+- Scan the diff for secrets; confirm new routes have the right guards.

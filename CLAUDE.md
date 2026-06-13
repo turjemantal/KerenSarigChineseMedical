@@ -44,6 +44,22 @@ both `Dockerfile`s, and the `Makefile`. Client-side `VITE_*` build vars need
 plumbing in three places: `client/Dockerfile` (ARG/ENV), `Makefile` push-images
 (`--build-arg`), and `docker-compose.yml` client build args.
 
+## Security — verify on every change
+
+Before committing, confirm:
+- **Auth guards** — every mutating or admin route has `@UseGuards(AdminAuthGuard)`
+  or `@UseGuards(JwtAuthGuard)`. Public routes expose only public data.
+- **Server-authoritative** — never trust the client. Re-validate on the server
+  (e.g. a booking must pass the server's availability check even if the client
+  sent it). Ownership checks (`cancelOwn`) live in the manager.
+- **Input validation** — Joi pipe on bodies; validate path/query params in the
+  manager. Validate ObjectIds before querying (return 404, not a 500/CastError).
+- **Bounds** — cap public range/list endpoints (e.g. `MAX_PUBLIC_RANGE_DAYS`) so
+  they can't be used to dump data; rely on the global throttler for rate limits.
+- **No PII / secrets in logs** — phones masked via `maskPhone`; headers redacted;
+  bodies never logged.
+- **No secrets in git** — scan the diff for tokens/passwords before pushing.
+
 ## Secrets
 
 Never commit secrets. Real values live only in the gitignored `.env`;
