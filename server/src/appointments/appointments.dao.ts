@@ -22,6 +22,12 @@ export class AppointmentsDao {
     return this.model.find({ date, status: { $ne: AppointmentStatus.CANCELLED } }).exec();
   }
 
+  findBetween(from: string, to: string): Promise<AppointmentDocument[]> {
+    return this.model
+      .find({ date: { $gte: from, $lte: to }, status: { $ne: AppointmentStatus.CANCELLED } })
+      .exec();
+  }
+
   findByPhone(phone: string): Promise<AppointmentDocument[]> {
     return this.model.find({ phone }).sort({ date: 1, time: 1 }).exec();
   }

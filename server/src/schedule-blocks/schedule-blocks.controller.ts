@@ -1,21 +1,11 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ScheduleBlocksManager } from './schedule-blocks.manager';
 import { CreateScheduleBlockDto } from './dto/create-schedule-block.dto';
+import { CreateExtraSlotDto } from './dto/create-extra-slot.dto';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
 import { createScheduleBlockSchema } from './dto/validations/schedule-block.schemas';
-import { DATE_REGEX } from '../common/constants/validation.constants';
-import { ERRORS } from '../common/constants/errors.constants';
+import { createExtraSlotSchema } from './dto/validations/extra-slot.schemas';
 
 @Controller('schedule-blocks')
 export class ScheduleBlocksController {
@@ -36,10 +26,26 @@ export class ScheduleBlocksController {
   // public — lets the booking calendar grey out closed days and blocked hours
   @Get('public')
   findPublic(@Query('from') from: string, @Query('to') to: string) {
-    if (!DATE_REGEX.test(from || '') || !DATE_REGEX.test(to || '')) {
-      throw new BadRequestException(ERRORS.INVALID_DATE_FORMAT);
-    }
     return this.manager.getPublicInRange(from, to);
+  }
+
+  // ─── Extra slots (admin opens additional bookable times) ────────────────────
+  @UseGuards(AdminAuthGuard)
+  @Post('extra-slots')
+  addExtraSlot(@Body(new JoiValidationPipe(createExtraSlotSchema)) dto: CreateExtraSlotDto) {
+    return this.manager.addExtraSlot(dto.date, dto.time);
+  }
+
+  @UseGuards(AdminAuthGuard)
+  @Get('extra-slots')
+  findExtraSlots() {
+    return this.manager.getExtraSlots();
+  }
+
+  @UseGuards(AdminAuthGuard)
+  @Delete('extra-slots/:id')
+  removeExtraSlot(@Param('id') id: string) {
+    return this.manager.removeExtraSlot(id);
   }
 
   @UseGuards(AdminAuthGuard)

@@ -85,4 +85,10 @@ export interface ScheduleBlock {
   reason?: string
 }
 
+export interface ExtraSlot {
+  _id: string
+  date: string
+  time: string
+}
+
 export type PublicScheduleBlock = Omit<ScheduleBlock, '_id' | 'reason'>

@@ -30,3 +30,22 @@ export function clinicTimeNow(): string {
 export function weekdayOf(dateStr: string): Weekday {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay() as Weekday;
 }
+
+// Add n days to a YYYY-MM-DD date, returning YYYY-MM-DD (timezone-independent)
+export function addDays(dateStr: string, n: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// All YYYY-MM-DD dates from `from` to `to` inclusive (timezone-independent)
+export function eachDateInRange(from: string, to: string): string[] {
+  const dates: string[] = [];
+  const cur = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (cur <= end) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
+}

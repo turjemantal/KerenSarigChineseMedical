@@ -1,13 +1,12 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AppointmentsManager } from './appointments.manager';
@@ -19,9 +18,6 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
 import { createAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
 import { AuthUser } from '../auth/jwt.strategy';
-import { AppointmentStatus } from '../common/enums/appointment-status.enum';
-import { DATE_REGEX } from '../common/constants/validation.constants';
-import { ERRORS } from '../common/constants/errors.constants';
 
 @Controller('appointments')
 export class AppointmentsController {
@@ -33,7 +29,7 @@ export class AppointmentsController {
     @CurrentUser() user: AuthUser,
     @Body(new JoiValidationPipe(createAppointmentSchema)) dto: CreateAppointmentDto,
   ) {
-    return this.manager.book({ ...dto, phone: user.phone, name: dto.name || user.name || user.phone });
+    return this.manager.book(dto, { phone: user.phone, name: user.name });
   }
 
   @UseGuards(AdminAuthGuard)
@@ -48,12 +44,15 @@ export class AppointmentsController {
     return this.manager.getByPhone(user.phone);
   }
 
+  // public — free bookable slots per date across a range (booking calendar)
+  @Get('availability')
+  getAvailabilityRange(@Query('from') from: string, @Query('to') to: string) {
+    return this.manager.getAvailabilityRange(from, to);
+  }
+
   // must come before :id
   @Get('availability/:date')
   getAvailability(@Param('date') date: string) {
-    if (!DATE_REGEX.test(date)) {
-      throw new BadRequestException(ERRORS.INVALID_DATE_FORMAT);
-    }
     return this.manager.getAvailability(date);
   }
 
@@ -75,15 +74,13 @@ export class AppointmentsController {
   @UseGuards(AdminAuthGuard)
   @Patch(':id/approve')
   approve(@Param('id') id: string) {
-    return this.manager.update(id, { status: AppointmentStatus.SCHEDULED });
+    return this.manager.approve(id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id/cancel')
-  async cancelOwn(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    const appt = await this.manager.getById(id);
-    if (appt.phone !== user.phone) throw new ForbiddenException();
-    return this.manager.update(id, { status: AppointmentStatus.CANCELLED });
+  cancelOwn(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.manager.cancelOwn(id, user.phone);
   }
 
   @UseGuards(AdminAuthGuard)

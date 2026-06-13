@@ -4,6 +4,7 @@ export enum Entity {
   Appointment = 'Appointment',
   Lead = 'Lead',
   ScheduleBlock = 'Schedule block',
+  ExtraSlot = 'Extra slot',
   Client = 'Client',
 }
 
@@ -44,9 +45,11 @@ export const ERRORS = {
 
   // domain
   SLOT_BLOCKED: 'המועד שנבחר אינו זמין — הקליניקה סגורה בשעות אלו',
+  SLOT_NOT_AVAILABLE: 'המועד שנבחר אינו זמין יותר. אנא בחרו מועד אחר.',
   DATE_IN_PAST: 'לא ניתן לקבוע תור לתאריך שעבר',
   TIME_IN_PAST: 'לא ניתן לקבוע תור לשעה שכבר עברה',
   CLOSED_WEEKDAY: 'הקליניקה סגורה ביום זה',
+  EXTRA_SLOT_EXISTS: 'השעה כבר פתוחה או תפוסה בתאריך זה',
 
   // rate limiting
   OTP_COOLDOWN: 'כבר נשלח קוד למספר זה. המתינו רגע לפני בקשת קוד חדש.',

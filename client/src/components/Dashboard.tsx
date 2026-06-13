@@ -10,7 +10,7 @@ import {
   APPOINTMENT_DURATION_MINUTES,
   UI_ERRORS,
 } from '../constants'
-import type { ScheduleBlock } from '../constants'
+import type { ScheduleBlock, ExtraSlot } from '../constants'
 
 // ---------- Types ----------
 interface Lead {
@@ -102,6 +102,18 @@ function useScheduleBlocks() {
   }
   useEffect(refresh, [])
   return { blocks, refresh }
+}
+
+function useExtraSlots() {
+  const [extraSlots, setExtraSlots] = useState<ExtraSlot[]>([])
+  const refresh = () => {
+    fetch('/api/schedule-blocks/extra-slots', { headers: adminAuthHeader() })
+      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<ExtraSlot[]> })
+      .then(setExtraSlots)
+      .catch(() => {})
+  }
+  useEffect(refresh, [])
+  return { extraSlots, refresh }
 }
 
 // ---------- Helpers ----------
@@ -572,9 +584,10 @@ function Chevron({ dir, s = 12 }: { dir: 'prev' | 'next'; s?: number }) {
   )
 }
 
-function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: Appointment[]; blocks: ScheduleBlock[]; onBlocksChange: () => void }) {
+function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtraChange }: { appointments: Appointment[]; blocks: ScheduleBlock[]; extraSlots: ExtraSlot[]; onBlocksChange: () => void; onExtraChange: () => void }) {
   const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(new Date()))
   const [mobileDay, setMobileDay] = useState(() => new Date())
+  const [mobileView, setMobileView] = useState<'day' | 'week' | 'month'>('day')
   const [now, setNow] = useState(new Date())
   const [blocksOpen, setBlocksOpen] = useState(false)
   const WORK_DAYS = 5
@@ -614,6 +627,32 @@ function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: 
     .sort((a, b) => a.time.localeCompare(b.time))
   const mobileDayBlocks = blocks.filter(b => dateInBlock(mobileDateStr, b))
   const mobileDayClosed = mobileDayBlocks.some(b => !b.startTime)
+  const apptsOn = (ds: string) => appointments.filter(a => a.date === ds && a.status !== AppointmentStatus.Cancelled)
+
+  // mobile week (the work week containing mobileDay)
+  const mobileWeekStart = getMondayOfWeek(mobileDay)
+  const mobileWeekDays = Array.from({ length: WORK_DAYS }, (_, i) => addDays(mobileWeekStart, i))
+
+  // mobile month grid (the month of mobileDay)
+  const mMonthFirst = new Date(mobileDay.getFullYear(), mobileDay.getMonth(), 1)
+  const mDaysInMonth = new Date(mobileDay.getFullYear(), mobileDay.getMonth() + 1, 0).getDate()
+  const monthCells: (number | null)[] = []
+  for (let i = 0; i < mMonthFirst.getDay(); i++) monthCells.push(null)
+  for (let d = 1; d <= mDaysInMonth; d++) monthCells.push(d)
+  while (monthCells.length % 7 !== 0) monthCells.push(null)
+  const HEB_MONTH_NAMES = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר']
+
+  // shift the mobile date by one unit of the current view (day/week/month)
+  const shiftMobile = (dir: 1 | -1) => setMobileDay(d => {
+    if (mobileView === 'day') return addDays(d, dir)
+    if (mobileView === 'week') return addDays(d, dir * 7)
+    return new Date(d.getFullYear(), d.getMonth() + dir, Math.min(d.getDate(), 28))
+  })
+  const mobileNavLabel = mobileView === 'day'
+    ? `${hebDateLabel(mobileDay)} · ${hebFullDate(mobileDay)}`
+    : mobileView === 'week'
+      ? `${hebFullDate(mobileWeekStart)} – ${hebFullDate(addDays(mobileWeekStart, WORK_DAYS - 1))}`
+      : `${HEB_MONTH_NAMES[mobileDay.getMonth()]} ${mobileDay.getFullYear()}`
 
   return (
     <div className="p-4 md:p-10">
@@ -629,19 +668,28 @@ function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: 
           </button>
           <button onClick={goToday} className="h-9 px-3 text-[12px]" style={NAV_BUTTON_STYLE}>היום</button>
         </div>
-        {/* day navigation — mobile */}
-        <div className="flex md:hidden items-center justify-between w-full gap-2">
-          <button onClick={() => setMobileDay(d => addDays(d, -1))} className="w-11 h-11 flex items-center justify-center" style={NAV_BUTTON_STYLE} aria-label="יום קודם">
-            <Chevron dir="prev" s={14} />
-          </button>
-          <button onClick={() => setMobileDay(new Date())} className="flex-1 h-11 text-center" style={NAV_BUTTON_STYLE}>
-            <span style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 17, color: mobileDateStr === todayDateStr ? '#C4634A' : '#1C2A24' }}>
-              {hebDateLabel(mobileDay)} · {hebFullDate(mobileDay)}
-            </span>
-          </button>
-          <button onClick={() => setMobileDay(d => addDays(d, 1))} className="w-11 h-11 flex items-center justify-center" style={NAV_BUTTON_STYLE} aria-label="יום הבא">
-            <Chevron dir="next" s={14} />
-          </button>
+        {/* view toggle + navigation — mobile */}
+        <div className="flex md:hidden flex-col gap-3 w-full">
+          <div className="grid grid-cols-3 gap-1 p-1" style={{ background: '#EBE4D6', borderRadius: 999 }}>
+            {([['day', 'יום'], ['week', 'שבוע'], ['month', 'חודש']] as const).map(([v, label]) => (
+              <button key={v} onClick={() => setMobileView(v)}
+                className="h-9 text-[13px] transition-all"
+                style={{ background: mobileView === v ? '#1C2A24' : 'transparent', color: mobileView === v ? '#F5F1EA' : '#4A6B5C', borderRadius: 999, fontWeight: mobileView === v ? 500 : 400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={() => shiftMobile(-1)} className="w-11 h-11 flex items-center justify-center" style={NAV_BUTTON_STYLE} aria-label="הקודם">
+              <Chevron dir="prev" s={14} />
+            </button>
+            <button onClick={() => setMobileDay(new Date())} className="flex-1 h-11 text-center" style={NAV_BUTTON_STYLE}>
+              <span style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 16, color: mobileDateStr === todayDateStr && mobileView === 'day' ? '#C4634A' : '#1C2A24' }}>{mobileNavLabel}</span>
+            </button>
+            <button onClick={() => shiftMobile(1)} className="w-11 h-11 flex items-center justify-center" style={NAV_BUTTON_STYLE} aria-label="הבא">
+              <Chevron dir="next" s={14} />
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-4 flex-wrap w-full md:w-auto">
           <div className="hidden md:flex items-center gap-4 text-[11.5px]" style={{ color: '#4A6B5C' }}>
@@ -653,8 +701,8 @@ function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: 
         </div>
       </div>
 
-      {/* mobile day agenda */}
-      <div className="md:hidden space-y-3">
+      {/* mobile — day agenda */}
+      <div className={`md:hidden space-y-3 ${mobileView === 'day' ? '' : 'hidden'}`}>
         {mobileDayClosed && (
           <div className="p-4 text-center" style={{ background: 'repeating-linear-gradient(135deg, rgba(28,42,36,0.06) 0 8px, rgba(28,42,36,0.12) 8px 16px)', borderRadius: 2, border: '1px solid rgba(28,42,36,0.1)' }}>
             <div style={{ fontSize: 14.5, fontWeight: 500 }}>הקליניקה סגורה ביום זה</div>
@@ -691,6 +739,64 @@ function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: 
           </div>
         )}
       </div>
+
+      {/* mobile — week list */}
+      {mobileView === 'week' && (
+        <div className="md:hidden space-y-3">
+          {mobileWeekDays.map(d => {
+            const ds = formatDate(d)
+            const dayList = apptsOn(ds).sort((a, b) => a.time.localeCompare(b.time))
+            const isToday = ds === todayDateStr
+            const dayClosed = blocks.some(b => dateInBlock(ds, b) && !b.startTime)
+            return (
+              <div key={ds} style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                <button onClick={() => { setMobileDay(d); setMobileView('day') }} className="w-full flex items-center justify-between px-4 py-2.5" style={{ background: isToday ? 'rgba(196,99,74,0.06)' : '#F5F1EA', borderBottom: '1px solid rgba(28,42,36,0.08)' }}>
+                  <span style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 15.5, color: isToday ? '#C4634A' : '#1C2A24', fontWeight: isToday ? 600 : 400 }}>{hebDateLabel(d)} · {hebFullDate(d)}</span>
+                  <span style={{ fontSize: 11.5, color: '#4A6B5C' }}>{dayClosed ? 'סגור' : dayList.length ? `${dayList.length} תורים` : '—'}</span>
+                </button>
+                {dayList.map(a => {
+                  const { bg } = apptColor(a.status)
+                  return (
+                    <div key={a._id} className="flex items-center gap-3 px-4 py-2.5" style={{ borderTop: '1px solid rgba(28,42,36,0.05)', borderRight: `3px solid ${bg}` }}>
+                      <span style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 15, direction: 'ltr', minWidth: 44 }}>{a.time}</span>
+                      <span className="flex-1 truncate" style={{ fontSize: 13.5 }}>{a.name}</span>
+                      <Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* mobile — month grid */}
+      {mobileView === 'month' && (
+        <div className="md:hidden" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, padding: 10 }}>
+          <div className="grid grid-cols-7 mb-1">
+            {['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'].map((d, i) => (
+              <div key={i} className="text-center" style={{ fontSize: 10.5, color: '#4A6B5C', padding: '4px 0' }}>{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthCells.map((d, i) => {
+              if (!d) return <div key={i} />
+              const cellDate = new Date(mobileDay.getFullYear(), mobileDay.getMonth(), d)
+              const ds = formatDate(cellDate)
+              const count = apptsOn(ds).length
+              const pending = apptsOn(ds).some(a => a.status === AppointmentStatus.Pending)
+              const isToday = ds === todayDateStr
+              return (
+                <button key={i} onClick={() => { setMobileDay(cellDate); setMobileView('day') }}
+                  className="flex flex-col items-center justify-center" style={{ aspectRatio: '1', borderRadius: 4, background: isToday ? 'rgba(196,99,74,0.1)' : count ? '#F5F1EA' : 'transparent' }}>
+                  <span style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 15, color: isToday ? '#C4634A' : '#1C2A24', fontWeight: isToday ? 600 : 400 }}>{d}</span>
+                  {count > 0 && <span style={{ width: 5, height: 5, borderRadius: '50%', background: pending ? '#B8893B' : '#4A6B5C', marginTop: 2 }} />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* desktop week grid */}
       <div className="hidden md:block" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2, overflow: 'hidden' }}>
@@ -790,61 +896,74 @@ function CalendarView({ appointments, blocks, onBlocksChange }: { appointments: 
       </div>
 
       {blocksOpen && (
-        <BlocksDrawer blocks={blocks} onClose={() => setBlocksOpen(false)} onChange={onBlocksChange} />
+        <BlocksDrawer blocks={blocks} extraSlots={extraSlots} onClose={() => setBlocksOpen(false)} onChange={onBlocksChange} onExtraChange={onExtraChange} />
       )}
     </div>
   )
 }
 
-// ---------- BlocksDrawer (close hours / days / vacations) ----------
-const BlockKind = { Hours: 'hours', Day: 'day', Vacation: 'vacation' } as const
+// ---------- BlocksDrawer (close hours / days / vacations, open extra slots) ----------
+const BlockKind = { Hours: 'hours', Day: 'day', Vacation: 'vacation', Open: 'open' } as const
 type BlockKind = (typeof BlockKind)[keyof typeof BlockKind]
 
 const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
   [BlockKind.Hours]: 'חסימת שעות',
   [BlockKind.Day]: 'סגירת יום',
   [BlockKind.Vacation]: 'חופשה',
+  [BlockKind.Open]: 'פתיחת שעה',
 }
 
 const TIME_OPTIONS = (() => {
   const out: string[] = []
-  for (let h = 8; h <= 20; h++) for (const m of [0, 15, 30, 45]) {
-    if (h === 20 && m > 0) break
+  for (let h = 7; h <= 21; h++) for (const m of [0, 15, 30, 45]) {
+    if (h === 21 && m > 0) break
     out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
   }
   return out
 })()
 
-function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; onClose: () => void; onChange: () => void }) {
+function BlocksDrawer({ blocks, extraSlots, onClose, onChange, onExtraChange }: {
+  blocks: ScheduleBlock[]; extraSlots: ExtraSlot[]; onClose: () => void; onChange: () => void; onExtraChange: () => void
+}) {
   const [kind, setKind] = useState<BlockKind>(BlockKind.Day)
   const [startDate, setStartDate] = useState(todayStr())
   const [endDate, setEndDate] = useState(todayStr())
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('13:00')
+  const [openTime, setOpenTime] = useState('09:00')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const post = async (url: string, body: object): Promise<boolean> => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
+      body: JSON.stringify(body),
+    })
+    return res.ok
+  }
+
   const submit = async () => {
     setError('')
-    const body: Record<string, string> = { startDate, reason: reason.trim() }
-    if (kind === BlockKind.Vacation) {
-      if (endDate < startDate) { setError(UI_ERRORS.END_DATE_BEFORE_START); return }
-      body.endDate = endDate
-    }
-    if (kind === BlockKind.Hours) {
-      if (endTime <= startTime) { setError(UI_ERRORS.END_TIME_BEFORE_START); return }
-      body.startTime = startTime
-      body.endTime = endTime
-    }
     setSaving(true)
     try {
-      const res = await fetch('/api/schedule-blocks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error()
+      if (kind === BlockKind.Open) {
+        if (!await post('/api/schedule-blocks/extra-slots', { date: startDate, time: openTime })) throw new Error()
+        onExtraChange()
+        return
+      }
+      const body: Record<string, string> = { startDate, reason: reason.trim() }
+      if (kind === BlockKind.Vacation) {
+        if (endDate < startDate) { setError(UI_ERRORS.END_DATE_BEFORE_START); return }
+        body.endDate = endDate
+      }
+      if (kind === BlockKind.Hours) {
+        if (endTime <= startTime) { setError(UI_ERRORS.END_TIME_BEFORE_START); return }
+        body.startTime = startTime
+        body.endTime = endTime
+      }
+      if (!await post('/api/schedule-blocks', body)) throw new Error()
       onChange()
     } catch {
       setError(UI_ERRORS.SAVE_FAILED)
@@ -858,6 +977,11 @@ function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; 
     if (res.ok) onChange()
   }
 
+  const removeExtra = async (id: string) => {
+    const res = await fetch(`/api/schedule-blocks/extra-slots/${id}`, { method: 'DELETE', headers: adminAuthHeader() })
+    if (res.ok) onExtraChange()
+  }
+
   const describe = (b: ScheduleBlock) => {
     const from = new Date(b.startDate + 'T00:00:00').toLocaleDateString('he-IL')
     const to = new Date(b.endDate + 'T00:00:00').toLocaleDateString('he-IL')
@@ -866,9 +990,10 @@ function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; 
   }
 
   const fieldStyle = { background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2, height: 40, padding: '0 10px', fontSize: 13.5, width: '100%' }
+  const sortedExtras = [...extraSlots].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
 
   return (
-    <Drawer onClose={onClose} title="חסימת זמנים וחופשות">
+    <Drawer onClose={onClose} title="ניהול זמינות — חסימות ושעות נוספות">
       <div className="flex flex-wrap gap-2 mb-6">
         {Object.values(BlockKind).map(k => (
           <button key={k} onClick={() => setKind(k)}
@@ -879,6 +1004,12 @@ function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; 
         ))}
       </div>
 
+      {kind === BlockKind.Open && (
+        <div className="mb-4 p-3" style={{ background: '#E8EDDF', borderRadius: 2, fontSize: 12.5, color: '#3A5C2A', lineHeight: 1.6 }}>
+          פתיחת שעה נוספת מאפשרת קביעת תור בשעה ספציפית — גם ביום או בשעה שאינם בלוח הקבוע.
+        </div>
+      )}
+
       <div className="space-y-4">
         <div>
           <Label>{kind === BlockKind.Vacation ? 'מתאריך' : 'תאריך'}</Label>
@@ -888,6 +1019,14 @@ function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; 
           <div>
             <Label>עד תאריך</Label>
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="mt-2" style={fieldStyle} />
+          </div>
+        )}
+        {kind === BlockKind.Open && (
+          <div>
+            <Label>שעה</Label>
+            <select value={openTime} onChange={e => setOpenTime(e.target.value)} className="mt-2" style={fieldStyle}>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
         )}
         {kind === BlockKind.Hours && (
@@ -906,12 +1045,14 @@ function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; 
             </div>
           </div>
         )}
-        <div>
-          <Label>סיבה (אופציונלי)</Label>
-          <input value={reason} onChange={e => setReason(e.target.value)} placeholder="למשל: חופשה, השתלמות…" className="mt-2" style={fieldStyle} />
-        </div>
+        {kind !== BlockKind.Open && (
+          <div>
+            <Label>סיבה (אופציונלי)</Label>
+            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="למשל: חופשה, השתלמות…" className="mt-2" style={fieldStyle} />
+          </div>
+        )}
         {error && <div style={{ fontSize: 13, color: '#C4634A' }}>{error}</div>}
-        <Button variant="primary" onClick={() => void submit()} disabled={saving} className="w-full">
+        <Button variant={kind === BlockKind.Open ? 'moss' : 'primary'} onClick={() => void submit()} disabled={saving} className="w-full">
           {saving ? 'שומר…' : BLOCK_KIND_LABELS[kind]}
         </Button>
       </div>
@@ -934,6 +1075,22 @@ function BlocksDrawer({ blocks, onClose, onChange }: { blocks: ScheduleBlock[]; 
           </div>
         )}
       </div>
+
+      {sortedExtras.length > 0 && (
+        <div className="mt-8">
+          <div style={{ fontSize: 11.5, letterSpacing: '0.18em', color: '#4A6B5C', marginBottom: 12 }}>שעות נוספות שנפתחו</div>
+          <div className="space-y-2">
+            {sortedExtras.map(s => (
+              <div key={s._id} className="flex items-center justify-between gap-3 px-4 py-3" style={{ background: '#FFFFFF', border: '1px solid rgba(58,92,42,0.2)', borderRadius: 2 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>
+                  {new Date(s.date + 'T00:00:00').toLocaleDateString('he-IL')} · <span style={{ direction: 'ltr', display: 'inline-block' }}>{s.time}</span>
+                </div>
+                <button onClick={() => void removeExtra(s._id)} className="text-[12.5px] hover:underline shrink-0" style={{ color: '#C4634A' }}>הסרה</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Drawer>
   )
 }
@@ -1247,6 +1404,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const { leads, error: leadsError, refresh: refreshLeads } = useLeads()
   const { appointments, error: apptError, refresh: refreshAppts } = useAppointments()
   const { blocks, refresh: refreshBlocks } = useScheduleBlocks()
+  const { extraSlots, refresh: refreshExtraSlots } = useExtraSlots()
   const { clients } = useClients()
 
   return (
@@ -1263,7 +1421,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
         <div className="flex-1 overflow-auto">
           {view === 'today'        && <TodayView appointments={appointments} leads={leads} onStatusChange={refreshAppts} />}
           {view === 'leads'        && <LeadsView leads={leads} onSelect={setSelectedLead} />}
-          {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} onBlocksChange={refreshBlocks} />}
+          {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} extraSlots={extraSlots} onBlocksChange={refreshBlocks} onExtraChange={refreshExtraSlots} />}
           {view === 'appointments' && <AppointmentsView appointments={appointments} onStatusChange={refreshAppts} />}
           {view === 'patients'     && <PatientsView appointments={appointments} clients={clients} />}
         </div>

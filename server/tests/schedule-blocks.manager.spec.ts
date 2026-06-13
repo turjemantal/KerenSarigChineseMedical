@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { ScheduleBlocksManager } from '../src/schedule-blocks/schedule-blocks.manager';
 import { ScheduleBlocksService } from '../src/schedule-blocks/schedule-blocks.service';
+import { ExtraSlotsService } from '../src/schedule-blocks/extra-slots.service';
 import { createScheduleBlockSchema } from '../src/schedule-blocks/dto/validations/schedule-block.schemas';
 
 const dayBlock = { _id: 'b1', startDate: '2026-07-01', endDate: '2026-07-01', reason: 'השתלמות' };
@@ -9,6 +10,13 @@ const hoursBlock = { _id: 'b2', startDate: '2026-07-02', endDate: '2026-07-02', 
 const vacationBlock = { _id: 'b3', startDate: '2026-08-10', endDate: '2026-08-20', reason: 'חופשה' };
 
 const mockService = {
+  create: jest.fn(),
+  findAll: jest.fn(),
+  findInRange: jest.fn(),
+  delete: jest.fn(),
+};
+
+const mockExtraSlots = {
   create: jest.fn(),
   findAll: jest.fn(),
   findInRange: jest.fn(),
@@ -23,6 +31,7 @@ describe('ScheduleBlocksManager', () => {
       providers: [
         ScheduleBlocksManager,
         { provide: ScheduleBlocksService, useValue: mockService },
+        { provide: ExtraSlotsService, useValue: mockExtraSlots },
       ],
     }).compile();
     manager = module.get<ScheduleBlocksManager>(ScheduleBlocksManager);

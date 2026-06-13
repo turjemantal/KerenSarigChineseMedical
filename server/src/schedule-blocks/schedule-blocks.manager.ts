@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ScheduleBlocksService } from './schedule-blocks.service';
 import { ScheduleBlockDocument } from './schedule-block.schema';
+import { ExtraSlotsService } from './extra-slots.service';
+import { ExtraSlotDocument } from './extra-slot.schema';
 import { CreateScheduleBlockDto } from './dto/create-schedule-block.dto';
-import { MAX_PUBLIC_RANGE_DAYS } from '../common/constants/validation.constants';
+import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { ERRORS } from '../common/constants/errors.constants';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -16,7 +18,10 @@ export interface PublicScheduleBlock {
 
 @Injectable()
 export class ScheduleBlocksManager {
-  constructor(private readonly service: ScheduleBlocksService) {}
+  constructor(
+    private readonly service: ScheduleBlocksService,
+    private readonly extraSlots: ExtraSlotsService,
+  ) {}
 
   async create(dto: CreateScheduleBlockDto): Promise<ScheduleBlockDocument> {
     const endDate = dto.endDate || dto.startDate;
@@ -35,6 +40,9 @@ export class ScheduleBlocksManager {
 
   // public view for the booking calendar — without internal reasons
   async getPublicInRange(from: string, to: string): Promise<PublicScheduleBlock[]> {
+    if (!DATE_REGEX.test(from) || !DATE_REGEX.test(to)) {
+      throw new BadRequestException(ERRORS.INVALID_DATE_FORMAT);
+    }
     if (to < from) {
       throw new BadRequestException(ERRORS.INVALID_DATE_RANGE);
     }
@@ -55,7 +63,28 @@ export class ScheduleBlocksManager {
     return this.service.findInRange(date, date);
   }
 
+  getBlocksInRange(from: string, to: string): Promise<ScheduleBlockDocument[]> {
+    return this.service.findInRange(from, to);
+  }
+
   remove(id: string): Promise<void> {
     return this.service.delete(id);
+  }
+
+  // ─── Extra slots (admin opens additional bookable times on a date) ──────────
+  addExtraSlot(date: string, time: string): Promise<ExtraSlotDocument> {
+    return this.extraSlots.create(date, time);
+  }
+
+  getExtraSlots(): Promise<ExtraSlotDocument[]> {
+    return this.extraSlots.findAll();
+  }
+
+  getExtraSlotsInRange(from: string, to: string): Promise<ExtraSlotDocument[]> {
+    return this.extraSlots.findInRange(from, to);
+  }
+
+  removeExtraSlot(id: string): Promise<void> {
+    return this.extraSlots.delete(id);
   }
 }

@@ -3,8 +3,7 @@ import { Enso, Chop, Button, Label, FormField } from './shared'
 import { Icon } from './icons'
 import { getClient, getToken, saveAuth, authHeader } from '../auth'
 import type { ClientProfile } from '../auth'
-import { SLOT_PERIODS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLOSED_WEEKDAYS, CLINIC_CONTACT } from '../constants'
-import type { PublicScheduleBlock } from '../constants'
+import { APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLINIC_CONTACT } from '../constants'
 
 // ── types ──────────────────────────────────────────────────────────────────────
 interface BookingData {
@@ -21,8 +20,6 @@ const toDateStr = (d: Date) => {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
-
-const dateInBlock = (dateStr: string, b: PublicScheduleBlock) => dateStr >= b.startDate && dateStr <= b.endDate
 
 // ── main modal ─────────────────────────────────────────────────────────────────
 export default function BookingModal({ open, onClose, onPortal }: { open: boolean; onClose: () => void; onPortal?: () => void }) {
@@ -337,11 +334,19 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
 }
 
 // ── Step: Schedule (calendar + time) ──────────────────────────────────────────
+// time-of-day grouping for display (server returns a flat sorted list of free slots)
+const SLOT_PERIOD_LABELS = ['בוקר', 'אחה״צ', 'ערב'] as const
+function periodOf(time: string): typeof SLOT_PERIOD_LABELS[number] {
+  if (time < '12:00') return 'בוקר'
+  if (time < '17:00') return 'אחה״צ'
+  return 'ערב'
+}
+
 function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof BookingData, v: BookingData[keyof BookingData]) => void  }) {
   const today = new Date()
   const [viewMonth, setViewMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
-  const [takenSlots, setTakenSlots] = useState<Set<string>>(new Set())
-  const [blocks, setBlocks] = useState<PublicScheduleBlock[]>([])
+  // server-authoritative free slots per date for the viewed month: { 'YYYY-MM-DD': ['09:00', …] }
+  const [availability, setAvailability] = useState<Record<string, string[]>>({})
   const hebMonths = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר']
 
   const firstDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
@@ -352,53 +357,30 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
   while (cells.length % 7 !== 0) cells.push(null)
 
   useEffect(() => {
-    if (!data.date) return
-    const dateStr = toDateStr(data.date)
-    fetch(`/api/appointments/availability/${dateStr}`)
-      .then(r => r.json())
-      .then((times: string[]) => setTakenSlots(new Set(times)))
-      .catch(() => setTakenSlots(new Set()))
-  }, [data.date])
-
-  // closed days / blocked hours for the viewed month
-  useEffect(() => {
     const from = toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1))
     const to = toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0))
-    fetch(`/api/schedule-blocks/public?from=${from}&to=${to}`)
+    fetch(`/api/appointments/availability?from=${from}&to=${to}`)
       .then(r => r.json())
-      .then((b: PublicScheduleBlock[]) => setBlocks(Array.isArray(b) ? b : []))
-      .catch(() => setBlocks([]))
+      .then((map: unknown) => setAvailability(map && typeof map === 'object' ? map as Record<string, string[]> : {}))
+      .catch(() => setAvailability({}))
   }, [viewMonth])
 
-  const isDayClosed = (dateStr: string) =>
-    blocks.some(b => dateInBlock(dateStr, b) && !b.startTime)
+  // a day is bookable iff the server returned free slots for it (it already
+  // accounts for closed weekdays, blocks, past times, taken slots, and extras)
+  const slotsFor = (d: number) => availability[toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d))] ?? []
+  const isDisabled = (d: number | null) => !d || slotsFor(d).length === 0
 
-  const isSlotBlocked = (dateStr: string, time: string) =>
-    blocks.some(b => dateInBlock(dateStr, b) && !!b.startTime && !!b.endTime && time >= b.startTime && time < b.endTime)
-
-  // compare calendar days only — today at 00:00, so today itself stays bookable
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-
-  const isDisabled = (d: number | null) => {
-    if (!d) return true
-    const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d)
-    return date < todayStart || CLOSED_WEEKDAYS.includes(date.getDay()) || isDayClosed(toDateStr(date))
-  }
-
-  // when booking today, slots whose time already passed are unavailable
-  const isSlotInPast = (dateStr: string, time: string) => {
-    if (dateStr !== toDateStr(today)) return false
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const nowTime = `${pad(today.getHours())}:${pad(today.getMinutes())}`
-    return time <= nowTime
-  }
   const isSelected = (d: number | null) => {
     if (!d || !data.date) return false
     return data.date.getFullYear() === viewMonth.getFullYear() &&
            data.date.getMonth() === viewMonth.getMonth() &&
            data.date.getDate() === d
   }
-  const slots = SLOT_PERIODS
+
+  const dayTimes = data.date ? (availability[toDateStr(data.date)] ?? []) : []
+  const grouped = SLOT_PERIOD_LABELS
+    .map(label => [label, dayTimes.filter(t => periodOf(t) === label)] as const)
+    .filter(([, times]) => times.length > 0)
 
   return (
     <div className="py-6">
@@ -438,31 +420,32 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
           </div>
         </div>
 
-        {/* Time slots */}
+        {/* Time slots — only free slots are shown (server-computed) */}
         <div>
           {!data.date ? (
             <div className="flex items-center justify-center h-full" style={{ minHeight: 260, border: '1px dashed rgba(28,42,36,0.2)', borderRadius: 2 }}>
               <div className="text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>בחרו תאריך<br />כדי לראות שעות פנויות</div>
             </div>
+          ) : dayTimes.length === 0 ? (
+            <div className="flex items-center justify-center h-full" style={{ minHeight: 260, border: '1px dashed rgba(28,42,36,0.2)', borderRadius: 2 }}>
+              <div className="text-center" style={{ color: '#4A6B5C', fontSize: 13.5 }}>אין שעות פנויות בתאריך זה</div>
+            </div>
           ) : (
             <div>
-              {Object.entries(slots).map(([period, times]) => (
+              {grouped.map(([period, times]) => (
                 <div key={period} className="mt-5">
                   <div style={{ fontSize: 12.5, color: '#4A6B5C', marginBottom: 8 }}>{period}</div>
                   <div className="grid grid-cols-4 gap-2">
                     {times.map(t => {
-                      const isTaken = takenSlots.has(t) ||
-                        (data.date ? isSlotBlocked(toDateStr(data.date), t) || isSlotInPast(toDateStr(data.date), t) : false)
                       const selected = data.time === t
                       return (
-                        <button key={t} disabled={isTaken} onClick={() => update('time', t)}
+                        <button key={t} onClick={() => update('time', t)}
                           className="h-10 text-[13px] transition-all"
                           style={{
-                            background: selected ? '#1C2A24' : isTaken ? 'transparent' : '#FFFFFF',
-                            color: selected ? '#F5F1EA' : isTaken ? 'rgba(28,42,36,0.25)' : '#1C2A24',
+                            background: selected ? '#1C2A24' : '#FFFFFF',
+                            color: selected ? '#F5F1EA' : '#1C2A24',
                             border: `1px solid ${selected ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`,
-                            textDecoration: isTaken ? 'line-through' : 'none',
-                            cursor: isTaken ? 'default' : 'pointer', borderRadius: 2, direction: 'ltr',
+                            cursor: 'pointer', borderRadius: 2, direction: 'ltr',
                           }}>
                           {t}
                         </button>

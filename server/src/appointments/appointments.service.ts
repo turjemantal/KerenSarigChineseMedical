@@ -22,6 +22,10 @@ export class AppointmentsService {
     return this.dao.findByDate(date);
   }
 
+  findBetween(from: string, to: string): Promise<AppointmentDocument[]> {
+    return this.dao.findBetween(from, to);
+  }
+
   findByPhone(phone: string): Promise<AppointmentDocument[]> {
     return this.dao.findByPhone(phone);
   }
