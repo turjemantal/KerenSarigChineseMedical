@@ -67,7 +67,22 @@ Never commit secrets. Real values live only in the gitignored `.env`;
 
 ## Deploy
 
-`make deploy` builds + pushes images and restarts EC2. Config files mounted on
-EC2 (`nginx.conf`, `docker-compose.prod.yml`, `vector.yaml`) are NOT in the image
-— `scp` them when they change. The EC2 public IP changes on restart; find it with
-`make prod-ip`.
+**Auto-deploy (default):** pushing to `main` triggers the `deploy` job in
+`.github/workflows/ci.yml` — it runs only after CI passes, then builds + pushes
+images to ECR, ships the config files + the prod `.env`, and restarts EC2. A merge
+to `main` **is** a production deploy. Setup/ops runbook: `docs/cd-pipeline-setup.md`.
+
+- **Prod runtime config** lives in the `PROD_ENV_FILE` GitHub secret (not in git,
+  not on your laptop). To change a prod value, edit that secret — editing your
+  local `.env` does NOT reach prod. A pre-flight step
+  (`server/scripts/validate-env.ts`, reusing `envSchema`) validates the rendered
+  prod `.env` before anything ships, so a missing/invalid required var fails the
+  deploy **before** prod is touched instead of crash-looping it. Adding a new
+  required env var → update `env.validation.ts`, `.env.example`, AND the
+  `PROD_ENV_FILE` secret.
+- **Config files** mounted on EC2 (`nginx.conf`, `docker-compose.prod.yml`,
+  `vector.yaml`) are NOT in the image — the deploy scp's them every run, so just
+  edit them in the repo and merge.
+
+**Manual fallback:** `make deploy` still builds + pushes + restarts from a laptop.
+The EC2 host is a stable Elastic IP (`16.170.30.20`); confirm with `make prod-ip`.

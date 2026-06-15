@@ -261,9 +261,22 @@ make db-restore ARCHIVE=backups/.../keren-clinic.archive
 ### Architecture
 
 ```
-Mac → make deploy → Amazon ECR → EC2 pulls → serves on port 80
-                                 MongoDB Atlas (cloud database)
+Push to main → GitHub Actions (CI → deploy) → Amazon ECR → EC2 pulls → serves on port 80
+                                              MongoDB Atlas (cloud database)
 ```
+
+### Continuous deployment (default)
+
+Every push to `main` runs CI (lint/test/build) and, if it passes, the `deploy` job
+in `.github/workflows/ci.yml` automatically builds + pushes images, ships the
+config files and prod `.env`, and restarts EC2. **A merge to `main` is a deploy.**
+
+- Prod runtime config lives in the **`PROD_ENV_FILE`** GitHub secret — edit it to
+  change a prod value (your local `.env` only affects local dev). A pre-flight step
+  validates the rendered prod `.env` before anything ships, so a missing required
+  var fails the deploy instead of breaking prod.
+- One-time setup + day-to-day ops are documented in `docs/cd-pipeline-setup.md`
+  (local-only). `make deploy` remains available as a manual fallback.
 
 ### First-time EC2 setup
 
@@ -281,15 +294,17 @@ curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker ubuntu
 
 ### Deploying updates
 
-One command does everything — builds the images, pushes to ECR, and restarts the EC2 stack:
+Normally you just **merge to `main`** and the pipeline deploys (see above). For a
+manual deploy from your laptop, one command builds the images, pushes to ECR, and
+restarts the EC2 stack:
 ```bash
 make deploy
 ```
 
-If the EC2 IP changed (no Elastic IP yet — it changes on instance restart):
+The EC2 host is a stable **Elastic IP** (`16.170.30.20`), so it does not change on
+restart. Confirm it any time with `make prod-ip`; override only if it ever changes:
 ```bash
-make prod-ip                          # find the current IP
-make deploy EC2=ubuntu@<new-ip>       # deploy to it
+make deploy EC2=ubuntu@<new-ip>
 ```
 
 Other prod helpers: `make restart-prod` (skip rebuild), `make prod-logs` (tail server logs).
