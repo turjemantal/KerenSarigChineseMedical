@@ -2,8 +2,8 @@
 
 ECR=$(shell aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-central-1.amazonaws.com
 
-# EC2 connection — override if the IP changes: make deploy EC2=ubuntu@<new-ip>
-# (the instance has no Elastic IP yet, so the IP changes on restart — find it with: make prod-ip)
+# EC2 connection — 16.170.30.20 is an Elastic IP (stable across restarts).
+# Override only if it ever changes: make deploy EC2=ubuntu@<new-ip> (find it with: make prod-ip)
 EC2 ?= ubuntu@16.170.30.20
 KEY ?= ~/.ssh/keren-clinic.pem
 

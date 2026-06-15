@@ -54,9 +54,21 @@ If a controller has an `if`, `throw`, `.map`, fetch-then-check, or data shaping:
 - Public range/list endpoints are bounded (e.g. `MAX_PUBLIC_RANGE_DAYS`).
 - Phones masked in logs (`maskPhone`); no secrets/PII logged or committed.
 
+## New env vars
+
+If the module reads a new env var, wire it everywhere or the CD deploy will fail
+its pre-flight check (by design):
+- Add it to `src/config/env.validation.ts` (`envSchema`) — required vs optional,
+  with any format pattern. This is the single source of truth the server validates
+  at startup AND the CD pipeline validates before shipping.
+- Add a placeholder to root `.env.example` and your local `.env`.
+- Add the real value to the **`PROD_ENV_FILE` GitHub secret** (prod runtime config
+  is shipped from there, not from any local `.env`). See CLAUDE.md → Deploy.
+
 ## Before you're done
 
 - `cd server && npx tsc --noEmit && npm test`
 - `npm --prefix client run build`
 - `make rebuild` and verify the running container (local + Docker, per CLAUDE.md)
 - Scan the diff for secrets; confirm new routes have the right guards.
+- New env var? Updated `env.validation.ts` + `.env.example` + `PROD_ENV_FILE` secret.
