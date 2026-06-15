@@ -22,8 +22,12 @@ logs:
 	docker compose logs -f
 
 # ── Production deploy ─────────────────────────────────────────────────────────
+# PRIMARY PATH is now CI/CD: pushing to `main` auto-deploys via GitHub Actions
+# (.github/workflows/ci.yml). `make deploy` is a MANUAL FALLBACK and does NOT
+# touch the prod .env — that is owned by the PROD_ENV_FILE GitHub secret. See
+# docs/cd-pipeline-setup.md.
 
-# Full deployment: build images → push to ECR → restart the EC2 stack
+# Full deployment: build images → push to ECR → sync config + restart the EC2 stack
 deploy: push-images restart-prod
 	@echo "✅ Production deploy complete — https://kerensarig.co.il"
 
@@ -36,8 +40,11 @@ push-images:
 		--build-arg VITE_MEDIA_BASE_URL=$$(grep '^VITE_MEDIA_BASE_URL=' .env | cut -d= -f2-) \
 		-t $(ECR)/keren-client:latest --push ./client
 
-# Step 2: pull the latest images on EC2 and restart the stack
+# Step 2: sync config files, pull the latest images on EC2, and restart the stack.
+# Mirrors what the CD pipeline ships, MINUS .env (prod .env = PROD_ENV_FILE secret;
+# the local .env is dev-only and must never be pushed to prod).
 restart-prod:
+	scp -i $(KEY) docker-compose.prod.yml nginx.conf vector.yaml $(EC2):~/
 	ssh -i $(KEY) $(EC2) "aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin $(ECR) && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
 
 # Current public IP of the production instance

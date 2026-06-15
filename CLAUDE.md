@@ -41,8 +41,9 @@ Docker**. Before saying something works:
 Any change to env vars, build args, or services must be reflected in EVERY Docker
 path in the same change: `docker-compose.yml` (local), `docker-compose.prod.yml`,
 both `Dockerfile`s, and the `Makefile`. Client-side `VITE_*` build vars need
-plumbing in three places: `client/Dockerfile` (ARG/ENV), `Makefile` push-images
-(`--build-arg`), and `docker-compose.yml` client build args.
+plumbing in BOTH build paths: local — `client/Dockerfile` (ARG/ENV), `Makefile`
+push-images (`--build-arg`), `docker-compose.yml` client build args; and CI/CD —
+a GitHub **Variable** plus the client `build-args:` in `.github/workflows/ci.yml`.
 
 ## Security — verify on every change
 
@@ -62,8 +63,14 @@ Before committing, confirm:
 
 ## Secrets
 
-Never commit secrets. Real values live only in the gitignored `.env`;
+Never commit secrets. Local values live only in the gitignored `.env`;
 `.env.example` holds placeholders. `docs/` is local-only (gitignored).
+
+**Production** secrets live as **GitHub Actions secrets** (`PROD_ENV_FILE` =
+whole prod `.env`, `EC2_SSH_KEY`, `AWS_DEPLOY_ROLE_ARN`) — only a repo admin can
+overwrite them, none are readable back, and `main` is branch-protected so a
+malicious workflow can't be merged to exfiltrate them. The local `.env` is
+dev-only and never reaches prod.
 
 ## Deploy
 
