@@ -33,7 +33,11 @@ Follow it whenever you touch the server.
 8. Register the module in `app.module.ts`.
 9. Constants/enums/messages in `common/constants` + `common/enums` — no inline
    literals. Errors in `errors.constants.ts`.
-10. Tests in `server/tests/*.spec.ts` (manager + any pure util).
+10. Tests in `server/tests/*.spec.ts` (manager + service + any pure util); Joi
+    schema cases in `validation.spec.ts`. New endpoint/rule ⇒ new test.
+11. Docs: update `README.md` (Features/structure + test count) and the relevant
+    guide(s) in `docs/` (e.g. `keren-guide.md` for admin-facing behavior). See
+    CLAUDE.md → "Tests and docs are part of done".
 
 ## Moving logic out of a controller
 
@@ -72,3 +76,6 @@ its pre-flight check (by design):
 - `make rebuild` and verify the running container (local + Docker, per CLAUDE.md)
 - Scan the diff for secrets; confirm new routes have the right guards.
 - New env var? Updated `env.validation.ts` + `.env.example` + `PROD_ENV_FILE` secret.
+- Added/updated tests for the new behavior AND updated the docs (README + `docs/`
+  guides). A change isn't done without both — CLAUDE.md → "Tests and docs are part
+  of done".

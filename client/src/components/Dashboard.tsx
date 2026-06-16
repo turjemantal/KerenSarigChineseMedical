@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Enso, Button, Avatar, Label } from './shared'
 import { Icon } from './icons'
-import { clearAdminToken, adminAuthHeader } from '../auth'
+import { clearAdminToken, adminFetch } from '../auth'
 import {
   AppointmentStatus,
   APPOINTMENT_STATUS_LABELS,
@@ -46,7 +46,7 @@ function useLeads() {
   const refresh = () => {
     setLoading(true)
     setError(false)
-    fetch('/api/leads', { headers: adminAuthHeader() })
+    adminFetch('/api/leads')
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Lead[]> })
       .then(setLeads)
       .catch(() => setError(true))
@@ -63,7 +63,7 @@ function useAppointments() {
   const refresh = () => {
     setLoading(true)
     setError(false)
-    fetch('/api/appointments', { headers: adminAuthHeader() })
+    adminFetch('/api/appointments')
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Appointment[]> })
       .then(setAppointments)
       .catch(() => setError(true))
@@ -83,7 +83,7 @@ interface RegisteredClient {
 function useClients() {
   const [clients, setClients] = useState<RegisteredClient[]>([])
   const refresh = () => {
-    fetch('/api/clients', { headers: adminAuthHeader() })
+    adminFetch('/api/clients')
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<RegisteredClient[]> })
       .then(setClients)
       .catch(() => {})
@@ -95,7 +95,7 @@ function useClients() {
 function useScheduleBlocks() {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
   const refresh = () => {
-    fetch('/api/schedule-blocks', { headers: adminAuthHeader() })
+    adminFetch('/api/schedule-blocks')
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<ScheduleBlock[]> })
       .then(setBlocks)
       .catch(() => {})
@@ -107,7 +107,7 @@ function useScheduleBlocks() {
 function useExtraSlots() {
   const [extraSlots, setExtraSlots] = useState<ExtraSlot[]>([])
   const refresh = () => {
-    fetch('/api/schedule-blocks/extra-slots', { headers: adminAuthHeader() })
+    adminFetch('/api/schedule-blocks/extra-slots')
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<ExtraSlot[]> })
       .then(setExtraSlots)
       .catch(() => {})
@@ -120,7 +120,7 @@ type WeekSchedule = Record<number, string[]>
 function useWeeklySchedule() {
   const [schedule, setSchedule] = useState<WeekSchedule | null>(null)
   const refresh = () => {
-    fetch('/api/weekly-schedule', { headers: adminAuthHeader() })
+    adminFetch('/api/weekly-schedule')
       .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<WeekSchedule> })
       .then(setSchedule)
       .catch(() => {})
@@ -131,7 +131,7 @@ function useWeeklySchedule() {
 
 // ---------- Helpers ----------
 async function approveAppointment(id: string): Promise<boolean> {
-  const res = await fetch(`/api/appointments/${id}/approve`, { method: 'PATCH', headers: adminAuthHeader() })
+  const res = await adminFetch(`/api/appointments/${id}/approve`, { method: 'PATCH' })
   return res.ok
 }
 
@@ -546,7 +546,7 @@ function LeadDrawer({ lead, onClose, onStatusChange }: { lead: Lead; onClose: ()
     setSaving(true)
     setSaveError(false)
     try {
-      const res = await fetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeader() }, body: JSON.stringify({ status }) })
+      const res = await adminFetch(`/api/leads/${lead._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
       if (!res.ok) throw new Error()
       onStatusChange()
       onClose()
@@ -951,9 +951,9 @@ function BlocksDrawer({ blocks, extraSlots, onClose, onChange, onExtraChange }: 
   const [error, setError] = useState('')
 
   const post = async (url: string, body: object): Promise<boolean> => {
-    const res = await fetch(url, {
+    const res = await adminFetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     return res.ok
@@ -988,12 +988,12 @@ function BlocksDrawer({ blocks, extraSlots, onClose, onChange, onExtraChange }: 
   }
 
   const remove = async (id: string) => {
-    const res = await fetch(`/api/schedule-blocks/${id}`, { method: 'DELETE', headers: adminAuthHeader() })
+    const res = await adminFetch(`/api/schedule-blocks/${id}`, { method: 'DELETE' })
     if (res.ok) onChange()
   }
 
   const removeExtra = async (id: string) => {
-    const res = await fetch(`/api/schedule-blocks/extra-slots/${id}`, { method: 'DELETE', headers: adminAuthHeader() })
+    const res = await adminFetch(`/api/schedule-blocks/extra-slots/${id}`, { method: 'DELETE' })
     if (res.ok) onExtraChange()
   }
 
@@ -1111,8 +1111,9 @@ function BlocksDrawer({ blocks, extraSlots, onClose, onChange, onExtraChange }: 
 }
 
 // ---------- AppointmentsView ----------
-function AppointmentsView({ appointments, onStatusChange }: { appointments: Appointment[]; onStatusChange: () => void }) {
+function AppointmentsView({ appointments, clients, onStatusChange }: { appointments: Appointment[]; clients: RegisteredClient[]; onStatusChange: () => void }) {
   const [selected, setSelected] = useState<Appointment | null>(null)
+  const [creating, setCreating] = useState(false)
   const [filter, setFilter] = useState('all')
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
   const filterTabs: [string, string][] = [
@@ -1121,7 +1122,7 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
   ]
 
   const updateStatus = async (id: string, status: AppointmentStatus) => {
-    const res = await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...adminAuthHeader() }, body: JSON.stringify({ status }) })
+    const res = await adminFetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     if (!res.ok) return
     onStatusChange()
     setSelected(null)
@@ -1135,14 +1136,17 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
 
   return (
     <div className="p-6 md:p-10">
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        {filterTabs.map(([k, l]) => (
-          <button key={k} onClick={() => setFilter(k)}
-            className="text-[13px] px-4 h-9"
-            style={{ background: filter === k ? '#1C2A24' : 'transparent', color: filter === k ? '#F5F1EA' : '#1C2A24', border: `1px solid ${filter === k ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2 }}>
-            {l}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {filterTabs.map(([k, l]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              className="text-[13px] px-4 h-9"
+              style={{ background: filter === k ? '#1C2A24' : 'transparent', color: filter === k ? '#F5F1EA' : '#1C2A24', border: `1px solid ${filter === k ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2 }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <Button variant="primary" size="sm" onClick={() => setCreating(true)}>+ תור חדש</Button>
       </div>
 
       {/* mobile cards */}
@@ -1248,7 +1252,148 @@ function AppointmentsView({ appointments, onStatusChange }: { appointments: Appo
           </div>
         </Drawer>
       )}
+
+      {creating && (
+        <NewAppointmentDrawer clients={clients} onClose={() => setCreating(false)} onCreated={() => { onStatusChange(); setCreating(false) }} />
+      )}
     </div>
+  )
+}
+
+// ---------- NewAppointmentDrawer (admin books for a client) ----------
+function NewAppointmentDrawer({ clients, onClose, onCreated }: { clients: RegisteredClient[]; onClose: () => void; onCreated: () => void }) {
+  const [selected, setSelected] = useState<RegisteredClient | null>(null)
+  const [query, setQuery] = useState('')
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('')
+  const [concern, setConcern] = useState('')
+  const [notes, setNotes] = useState('')
+  const [slots, setSlots] = useState<string[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const fieldStyle = { background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2, height: 40, padding: '0 10px', fontSize: 13.5, width: '100%' }
+
+  // load free slots for the chosen date (public availability — server-authoritative)
+  useEffect(() => {
+    setTime('')
+    if (!date) { setSlots([]); return }
+    setSlotsLoading(true)
+    fetch(`/api/appointments/availability/${date}`)
+      .then(r => r.ok ? r.json() as Promise<string[]> : [])
+      .then(setSlots)
+      .catch(() => setSlots([]))
+      .finally(() => setSlotsLoading(false))
+  }, [date])
+
+  // search the registered clients by name or phone — an appointment must be tied to
+  // an existing client (added beforehand via the patients screen)
+  const q = query.trim()
+  const matches = q
+    ? clients.filter(c => (c.name || '').includes(q) || c.phone.includes(q)).slice(0, 8)
+    : []
+
+  const submit = async () => {
+    setError('')
+    if (!selected) { setError('יש לבחור לקוח'); return }
+    if (!date || !time) { setError('יש לבחור תאריך ושעה'); return }
+    setSaving(true)
+    try {
+      const res = await adminFetch('/api/appointments/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selected.name || selected.phone, phone: selected.phone, date, time, concern, notes }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.message || 'שמירת התור נכשלה')
+        return
+      }
+      onCreated()
+    } catch {
+      setError('שמירת התור נכשלה')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Drawer onClose={onClose} title="קביעת תור חדש">
+      <div className="space-y-4">
+        <div>
+          <Label>לקוח</Label>
+          {selected ? (
+            <div className="mt-2 flex items-center justify-between px-3 py-2" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar name={selected.name || selected.phone} size={30} />
+                <div className="min-w-0">
+                  <div className="truncate" style={{ fontSize: 14, fontWeight: 500 }}>{selected.name || selected.phone}</div>
+                  <div style={{ fontSize: 12, color: '#4A6B5C', direction: 'ltr', textAlign: 'right' }}>{selected.phone}</div>
+                </div>
+              </div>
+              <button onClick={() => { setSelected(null); setQuery('') }} className="text-[12px] underline shrink-0" style={{ color: '#4A6B5C' }}>שינוי</button>
+            </div>
+          ) : (
+            <>
+              <input value={query} onChange={e => setQuery(e.target.value)} className="mt-2" style={fieldStyle} placeholder="חיפוש לפי שם או טלפון…" autoFocus />
+              {q && matches.length > 0 && (
+                <div className="mt-2" style={{ border: '1px solid rgba(28,42,36,0.12)', borderRadius: 2, overflow: 'hidden' }}>
+                  {matches.map(c => (
+                    <button key={c._id} onClick={() => { setSelected(c); setQuery('') }}
+                      className="w-full text-right px-3 py-2 hover:bg-[#F5F1EA] flex items-center gap-3"
+                      style={{ borderBottom: '1px solid rgba(28,42,36,0.06)' }}>
+                      <Avatar name={c.name || c.phone} size={26} />
+                      <div className="min-w-0">
+                        <div className="truncate" style={{ fontSize: 13.5 }}>{c.name || c.phone}</div>
+                        <div style={{ fontSize: 12, color: '#4A6B5C', direction: 'ltr', textAlign: 'right' }}>{c.phone}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {q && matches.length === 0 && (
+                <div className="mt-2" style={{ fontSize: 13, color: '#8B2A15' }}>לא נמצא לקוח. יש להוסיף אותו קודם במסך המטופלים.</div>
+              )}
+            </>
+          )}
+        </div>
+        <div>
+          <Label>תאריך</Label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-2" style={fieldStyle} />
+        </div>
+        <div>
+          <Label>שעה</Label>
+          {!date ? (
+            <div className="mt-2" style={{ fontSize: 13, color: '#4A6B5C' }}>בחרו תאריך כדי לראות שעות פנויות</div>
+          ) : slotsLoading ? (
+            <div className="mt-2" style={{ fontSize: 13, color: '#4A6B5C' }}>טוען שעות…</div>
+          ) : slots.length === 0 ? (
+            <div className="mt-2" style={{ fontSize: 13, color: '#8B2A15' }}>אין שעות פנויות בתאריך זה</div>
+          ) : (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {slots.map(s => (
+                <button key={s} onClick={() => setTime(s)} className="px-3 h-9" style={{ direction: 'ltr', fontSize: 13, borderRadius: 2, background: time === s ? '#1C2A24' : '#FFFFFF', color: time === s ? '#F5F1EA' : '#1C2A24', border: `1px solid ${time === s ? '#1C2A24' : 'rgba(28,42,36,0.15)'}` }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <Label>סיבת הפנייה (אופציונלי)</Label>
+          <input value={concern} onChange={e => setConcern(e.target.value)} className="mt-2" style={fieldStyle} />
+        </div>
+        <div>
+          <Label>הערות (אופציונלי)</Label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} className="mt-2" style={fieldStyle} />
+        </div>
+        {error && <div style={{ fontSize: 13, color: '#C4634A' }}>{error}</div>}
+        <Button variant="primary" onClick={() => void submit()} disabled={saving} className="w-full">
+          {saving ? 'שומר…' : 'קביעת התור'}
+        </Button>
+      </div>
+    </Drawer>
   )
 }
 
@@ -1333,8 +1478,9 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
   )
 }
 
-function PatientsView({ appointments, clients }: { appointments: Appointment[]; clients: RegisteredClient[] }) {
+function PatientsView({ appointments, clients, onClientAdded }: { appointments: Appointment[]; clients: RegisteredClient[]; onClientAdded: () => void }) {
   const [selected, setSelected] = useState<Patient | null>(null)
+  const [adding, setAdding] = useState(false)
   const [search, setSearch] = useState('')
   const patients = buildPatients(appointments, clients)
   const filtered = search
@@ -1343,11 +1489,12 @@ function PatientsView({ appointments, clients }: { appointments: Appointment[]; 
 
   return (
     <div className="p-6 md:p-10">
-      <div className="mb-5">
-        <div className="flex items-center gap-2 px-3 h-10 max-w-[320px]" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 px-3 h-10 flex-1 max-w-[320px]" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>
           <Icon.Search s={16} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש לפי שם או טלפון…" className="flex-1 bg-transparent outline-none text-[13px]" />
         </div>
+        <Button variant="primary" size="sm" onClick={() => setAdding(true)}>+ הוסף לקוח</Button>
       </div>
       {/* mobile cards */}
       <div className="md:hidden space-y-3">
@@ -1407,7 +1554,61 @@ function PatientsView({ appointments, clients }: { appointments: Appointment[]; 
         </table>
       </div>
       {selected && <PatientDrawer patient={selected} onClose={() => setSelected(null)} />}
+      {adding && <AddClientDrawer onClose={() => setAdding(false)} onCreated={() => { onClientAdded(); setAdding(false) }} />}
     </div>
+  )
+}
+
+// ---------- AddClientDrawer (admin adds a client) ----------
+function AddClientDrawer({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const fieldStyle = { background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2, height: 40, padding: '0 10px', fontSize: 13.5, width: '100%' }
+
+  const submit = async () => {
+    setError('')
+    if (name.trim().length < 2) { setError('יש להזין שם'); return }
+    if (!/^05\d{8}$/.test(phone)) { setError('מספר טלפון לא תקין'); return }
+    setSaving(true)
+    try {
+      const res = await adminFetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, name: name.trim() }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setError(body.message || 'הוספת הלקוח נכשלה')
+        return
+      }
+      onCreated()
+    } catch {
+      setError('הוספת הלקוח נכשלה')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Drawer onClose={onClose} title="הוספת לקוח">
+      <div className="space-y-4">
+        <div>
+          <Label>שם</Label>
+          <input value={name} onChange={e => setName(e.target.value)} className="mt-2" style={fieldStyle} placeholder="שם מלא" />
+        </div>
+        <div>
+          <Label>טלפון</Label>
+          <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ''))} className="mt-2" style={{ ...fieldStyle, direction: 'ltr', textAlign: 'right' }} placeholder="050-0000000" />
+        </div>
+        {error && <div style={{ fontSize: 13, color: '#C4634A' }}>{error}</div>}
+        <Button variant="primary" onClick={() => void submit()} disabled={saving} className="w-full">
+          {saving ? 'שומר…' : 'הוספת לקוח'}
+        </Button>
+      </div>
+    </Drawer>
   )
 }
 
@@ -1429,9 +1630,9 @@ function WeeklyScheduleView({ schedule, onChange }: { schedule: WeekSchedule | n
     setSaving(true)
     try {
       for (let wd = 0; wd <= 6; wd++) {
-        await fetch(`/api/weekly-schedule/${wd}`, {
+        await adminFetch(`/api/weekly-schedule/${wd}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...adminAuthHeader() },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ times: draft[wd] || [] }),
         })
       }
@@ -1489,7 +1690,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const { blocks, refresh: refreshBlocks } = useScheduleBlocks()
   const { extraSlots, refresh: refreshExtraSlots } = useExtraSlots()
   const { schedule, refresh: refreshSchedule } = useWeeklySchedule()
-  const { clients } = useClients()
+  const { clients, refresh: refreshClients } = useClients()
 
   return (
     <div className="flex min-h-screen" style={{ background: '#F5F1EA', color: '#1C2A24' }}>
@@ -1506,8 +1707,8 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
           {view === 'today'        && <TodayView appointments={appointments} leads={leads} onStatusChange={refreshAppts} />}
           {view === 'leads'        && <LeadsView leads={leads} onSelect={setSelectedLead} />}
           {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} extraSlots={extraSlots} onBlocksChange={refreshBlocks} onExtraChange={refreshExtraSlots} />}
-          {view === 'appointments' && <AppointmentsView appointments={appointments} onStatusChange={refreshAppts} />}
-          {view === 'patients'     && <PatientsView appointments={appointments} clients={clients} />}
+          {view === 'appointments' && <AppointmentsView appointments={appointments} clients={clients} onStatusChange={() => { refreshAppts(); refreshClients() }} />}
+          {view === 'patients'     && <PatientsView appointments={appointments} clients={clients} onClientAdded={refreshClients} />}
           {view === 'schedule'     && <WeeklyScheduleView schedule={schedule} onChange={refreshSchedule} />}
         </div>
       </main>

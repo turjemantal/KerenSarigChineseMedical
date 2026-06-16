@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Enso, Button, Avatar } from './shared'
 import { Icon } from './icons'
-import { getClient, getToken, clearAuth, authHeader, saveAuth } from '../auth'
+import { getClient, clearAuth, saveAuth, hasValidClientToken, clientSessionExpired, clientFetch, CLIENT_UNAUTHORIZED_EVENT } from '../auth'
 import type { ClientProfile } from '../auth'
 import { AppointmentStatus, APPOINTMENT_STATUS_LABELS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS } from '../constants'
 
@@ -22,7 +22,7 @@ function useMyAppointments(token: string | null) {
   const refresh = () => {
     if (!token) { setLoading(false); return }
     setLoading(true)
-    fetch('/api/appointments/mine', { headers: authHeader() })
+    clientFetch('/api/appointments/mine')
       .then(r => r.ok ? r.json() : [])
       .then(setAppointments)
       .catch(() => {})
@@ -64,7 +64,7 @@ const STATUS_COLOR: Record<AppointmentStatus, { bg: string; fg: string }> = {
 }
 
 // ── Login flow for portal ──────────────────────────────────────────────────────
-function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) {
+function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientProfile) => void; expired?: boolean }) {
   const [phase, setPhase] = useState<'phone' | 'otp'>('phone')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
@@ -112,6 +112,11 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
           </div>
         </div>
 
+        {expired && (
+          <div className="mb-5 px-3 py-2" style={{ background: '#FAE8E4', color: '#8B2A15', fontSize: 13, borderRadius: 2 }}>
+            פג תוקף ההתחברות, יש להתחבר מחדש.
+          </div>
+        )}
         {phase === 'phone' ? (
           <>
             <h2 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 28, fontWeight: 400 }}>כניסה לחשבון</h2>
@@ -156,8 +161,15 @@ function PortalLogin({ onLogin }: { onLogin: (client: ClientProfile) => void }) 
 // ── Portal main view ───────────────────────────────────────────────────────────
 export default function ClientPortal({ onExit }: { onExit: () => void }) {
   const [client, setClient] = useState<ClientProfile | null>(getClient)
-  const token = getToken()
-  const { appointments, loading, refresh } = useMyAppointments(client ? token : null)
+  const [expired, setExpired] = useState(clientSessionExpired())
+  const hasSession = hasValidClientToken()
+  const { appointments, loading, refresh } = useMyAppointments(client && hasSession ? 'ok' : null)
+
+  useEffect(() => {
+    const onUnauthorized = () => { setClient(null); setExpired(true) }
+    window.addEventListener(CLIENT_UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(CLIENT_UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [])
 
   const handleLogout = () => {
     clearAuth()
@@ -166,12 +178,12 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
   }
 
   const cancelAppointment = async (id: string) => {
-    await fetch(`/api/appointments/${id}/cancel`, { method: 'PATCH', headers: authHeader() })
+    await clientFetch(`/api/appointments/${id}/cancel`, { method: 'PATCH' })
     refresh()
   }
 
-  if (!client || !token) {
-    return <PortalLogin onLogin={c => setClient(c)} />
+  if (!client || !hasSession) {
+    return <PortalLogin expired={expired} onLogin={c => { setExpired(false); setClient(c) }} />
   }
 
   const upcoming = appointments.filter(a => (a.status === AppointmentStatus.Scheduled || a.status === AppointmentStatus.Pending) && isUpcoming(a.date, a.time))

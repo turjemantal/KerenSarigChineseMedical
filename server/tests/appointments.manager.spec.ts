@@ -4,6 +4,7 @@ import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
 import { ScheduleBlocksManager } from '../src/schedule-blocks/schedule-blocks.manager';
 import { WeeklyScheduleManager } from '../src/weekly-schedule/weekly-schedule.manager';
+import { ClientsManager } from '../src/clients/clients.manager';
 import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
@@ -47,6 +48,12 @@ const mockScheduleBlocks = {
 const EMPTY_SCHEDULE = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
 const mockWeeklySchedule = { getSchedule: jest.fn().mockResolvedValue(EMPTY_SCHEDULE) };
 
+const mockClients = {
+  findOrCreate: jest.fn().mockResolvedValue({ _id: 'c1' }),
+  create: jest.fn(),
+  findAll: jest.fn(),
+};
+
 const flushVoidPromises = () => new Promise(r => setTimeout(r, 0));
 
 // set up the data the availability computation reads (taken / blocks / extras)
@@ -68,12 +75,14 @@ describe('AppointmentsManager', () => {
         { provide: AppointmentsService, useValue: mockService },
         { provide: ScheduleBlocksManager, useValue: mockScheduleBlocks },
         { provide: WeeklyScheduleManager, useValue: mockWeeklySchedule },
+        { provide: ClientsManager, useValue: mockClients },
         { provide: MESSAGING_PROVIDER, useValue: mockMessaging },
       ],
     }).compile();
     manager = module.get<AppointmentsManager>(AppointmentsManager);
     jest.clearAllMocks();
     mockWeeklySchedule.getSchedule.mockResolvedValue(EMPTY_SCHEDULE);
+    mockClients.findOrCreate.mockResolvedValue({ _id: 'c1' });
   });
 
   describe('book', () => {
@@ -155,6 +164,39 @@ describe('AppointmentsManager', () => {
       await manager.book({ date: FUTURE_DATE, time: FUTURE_TIME }, { phone: '0501111111' });
       await flushVoidPromises();
       expect(mockMessaging.sendNewBookingAlert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bookForClient (admin)', () => {
+    const adminDto = { name: 'Alice', phone: '0501111111', date: FUTURE_DATE, time: FUTURE_TIME };
+
+    it('creates a confirmed appointment for an available slot and links the client', async () => {
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      mockService.create.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
+      const result = await manager.bookForClient(adminDto);
+      expect(mockClients.findOrCreate).toHaveBeenCalledWith('0501111111', 'Alice');
+      expect(mockService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: '0501111111', name: 'Alice', status: AppointmentStatus.SCHEDULED }),
+      );
+      expect(result.status).toBe(AppointmentStatus.SCHEDULED);
+    });
+
+    it('sends the client a confirmation SMS — but no admin alert', async () => {
+      process.env.ADMIN_PHONE = '0509999999';
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      mockService.create.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
+      await manager.bookForClient(adminDto);
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
+      expect(mockMessaging.sendNewBookingAlert).not.toHaveBeenCalled();
+      delete process.env.ADMIN_PHONE;
+    });
+
+    it('rejects an unavailable slot and creates nothing', async () => {
+      mockAvailability(); // no availability
+      await expect(manager.bookForClient(adminDto)).rejects.toThrow(BadRequestException);
+      expect(mockClients.findOrCreate).not.toHaveBeenCalled();
+      expect(mockService.create).not.toHaveBeenCalled();
     });
   });
 

@@ -27,8 +27,10 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **OTP login** — passwordless auth via SMS or WhatsApp one-time code
 - **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone)
 - **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer)
+- **Admin-created clients & appointments** — the admin can add a client directly (name required, unique phone) and book a confirmed appointment for an existing client, found via a name/phone search; the slot still passes the server's availability check and the client gets a confirmation SMS
 - **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API
 - **Client portal** — authenticated clients view and cancel their appointments
+- **Session handling** — both admin and client sessions detect an expired/invalid JWT (proactively on load and on any 401) and return to the login screen with a "session expired" notice instead of a stuck view
 - **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
 - **Automated reminders** — cron job at 09:00 sends reminders for next-day appointments
 - **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection)
@@ -231,7 +233,7 @@ cd server
 npm test
 ```
 
-104 tests covering auth, appointments, leads, clients, SMS provider, WhatsApp provider, and validation.
+184 tests covering auth, appointments (incl. admin-created), leads, clients, SMS provider, WhatsApp provider, and validation.
 
 ---
 
