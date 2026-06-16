@@ -3,7 +3,7 @@ import { Enso, Button } from './shared'
 import { Icon } from './icons'
 import { saveAdminToken } from '../auth'
 
-export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
+export default function AdminLogin({ onSuccess, expired = false }: { onSuccess: () => void; expired?: boolean }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,6 +42,11 @@ export default function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
 
         <h2 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 28, fontWeight: 400 }}>כניסה למנהל</h2>
         <p className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.6 }}>הזינו את סיסמת הניהול כדי להמשיך.</p>
+        {expired && (
+          <div className="mt-4 px-3 py-2" style={{ background: '#FAE8E4', color: '#8B2A15', fontSize: 13, borderRadius: 2 }}>
+            פג תוקף ההתחברות, יש להתחבר מחדש.
+          </div>
+        )}
 
         <div className="mt-8 space-y-4">
           <input

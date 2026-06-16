@@ -35,6 +35,31 @@ export const createAppointmentSchema = Joi.object({
   source: Joi.string().max(SOURCE_MAX_LENGTH).optional().allow(''),
 });
 
+// admin-created appointment — exactly the fields the admin "new appointment" form
+// sends. phone + name identify the client (not taken from a JWT) so both are
+// required; treatment falls back to the server default, email isn't collected here.
+export const createAdminAppointmentSchema = Joi.object({
+  name: Joi.string().trim().min(NAME_MIN_LENGTH).max(NAME_MAX_LENGTH).required().messages({
+    'string.min': ERRORS.nameMinLength(NAME_MIN_LENGTH),
+    'string.max': ERRORS.nameMaxLength(NAME_MAX_LENGTH),
+    'any.required': ERRORS.REQUIRED_NAME,
+  }),
+  phone: Joi.string().pattern(PHONE_REGEX).required().messages({
+    'string.pattern.base': ERRORS.INVALID_PHONE,
+    'any.required': ERRORS.REQUIRED_PHONE,
+  }),
+  concern: Joi.string().trim().max(CONCERN_MAX_LENGTH).optional().allow(''),
+  date: Joi.string().pattern(DATE_REGEX).required().messages({
+    'string.pattern.base': ERRORS.INVALID_DATE_FORMAT,
+    'any.required': ERRORS.REQUIRED_DATE,
+  }),
+  time: Joi.string().pattern(TIME_REGEX).required().messages({
+    'string.pattern.base': ERRORS.INVALID_TIME_FORMAT,
+    'any.required': ERRORS.REQUIRED_TIME,
+  }),
+  notes: Joi.string().max(NOTES_MAX_LENGTH).optional().allow(''),
+});
+
 export const updateAppointmentSchema = Joi.object({
   status: Joi.string()
     .valid(...Object.values(AppointmentStatus))

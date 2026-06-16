@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 import { ScheduleBlocksManager } from '../schedule-blocks/schedule-blocks.manager';
 import { WeeklyScheduleManager } from '../weekly-schedule/weekly-schedule.manager';
+import { ClientsManager } from '../clients/clients.manager';
 import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -12,6 +13,7 @@ import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { ERRORS } from '../common/constants/errors.constants';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { config } from '../config';
+import { ADMIN_SOURCE } from '../common/constants/defaults.constants';
 import { MAX_BOOKING_AHEAD_DAYS } from '../common/constants/schedule.constants';
 import { clinicToday, clinicTimeNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
 import { maskPhone } from '../common/utils/phone.utils';
@@ -30,6 +32,7 @@ export class AppointmentsManager {
     private readonly service: AppointmentsService,
     private readonly scheduleBlocks: ScheduleBlocksManager,
     private readonly weeklySchedule: WeeklyScheduleManager,
+    private readonly clients: ClientsManager,
     @Inject(MESSAGING_PROVIDER) private readonly messaging: IMessagingProvider,
   ) {}
 
@@ -54,6 +57,35 @@ export class AppointmentsManager {
     if (config.adminPhone) {
       this.notify('admin-alert', id, this.messaging.sendNewBookingAlert(config.adminPhone, appt.name, appt.date, appt.time));
     }
+    return appt;
+  }
+
+  // admin-created appointment: the client is identified by the phone/name in the
+  // body (not a JWT). Confirmed immediately and the client gets a confirmation SMS;
+  // no admin alert (the admin is the one creating it).
+  async bookForClient(dto: CreateAppointmentDto): Promise<AppointmentDocument> {
+    const phone = dto.phone!;
+    const name = dto.name || phone;
+
+    // still server-authoritative — the slot must be genuinely free
+    const available = await this.getAvailability(dto.date);
+    if (!available.includes(dto.time)) {
+      throw new BadRequestException(ERRORS.SLOT_NOT_AVAILABLE);
+    }
+
+    await this.clients.findOrCreate(phone, dto.name);
+    const appt = await this.service.create({
+      ...dto,
+      phone,
+      name,
+      status: AppointmentStatus.SCHEDULED,
+      source: ADMIN_SOURCE,
+    });
+    const id = String(appt._id);
+    this.logger.log(
+      `[Appointment] admin-booked appt=${id} phone=${maskPhone(appt.phone)} ${appt.date} ${appt.time} status=${appt.status}`,
+    );
+    this.notify('confirmation', id, this.messaging.sendBookingConfirmation(appt.phone, appt.name, appt.date, appt.time));
     return appt;
   }
 

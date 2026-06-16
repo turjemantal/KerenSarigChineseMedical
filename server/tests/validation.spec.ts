@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { createLeadSchema, updateLeadSchema } from '../src/leads/dto/validations/lead.schemas';
-import { createAppointmentSchema, updateAppointmentSchema } from '../src/appointments/dto/validations/appointment.schemas';
+import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema } from '../src/appointments/dto/validations/appointment.schemas';
+import { createClientSchema } from '../src/clients/dto/validations/client.schemas';
 import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from '../src/auth/dto/validations/auth.schemas';
 import { JoiValidationPipe } from '../src/common/pipes/joi-validation.pipe';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
@@ -131,6 +132,66 @@ describe('updateAppointmentSchema', () => {
 
   it('rejects a status value outside the enum', () => {
     expect(updateAppointmentSchema.validate({ status: 'invalid' }).error).toBeDefined();
+  });
+});
+
+// admin books for a client — phone AND name identify the client, so both required
+describe('createAdminAppointmentSchema', () => {
+  const valid = { name: 'ישראל ישראלי', phone: '0501234567', date: '2026-06-15', time: '10:30' };
+
+  it('accepts a valid admin payload', () => {
+    expect(createAdminAppointmentSchema.validate(valid).error).toBeUndefined();
+  });
+
+  it('rejects missing name (unlike the public booking schema)', () => {
+    expect(createAdminAppointmentSchema.validate({ ...valid, name: undefined }).error).toBeDefined();
+  });
+
+  it('rejects missing phone (unlike the public booking schema)', () => {
+    expect(createAdminAppointmentSchema.validate({ ...valid, phone: undefined }).error).toBeDefined();
+  });
+
+  it('rejects a non-Israeli phone', () => {
+    expect(createAdminAppointmentSchema.validate({ ...valid, phone: '0321234567' }).error).toBeDefined();
+  });
+
+  it('rejects missing date or time', () => {
+    expect(createAdminAppointmentSchema.validate({ ...valid, date: undefined }).error).toBeDefined();
+    expect(createAdminAppointmentSchema.validate({ ...valid, time: undefined }).error).toBeDefined();
+  });
+
+  it('accepts only the fields the admin form sends — rejects extras (email/treatment)', () => {
+    expect(createAdminAppointmentSchema.validate({ ...valid, concern: 'כאב גב', notes: 'x' }).error).toBeUndefined();
+    expect(createAdminAppointmentSchema.validate({ ...valid, email: 'a@b.com' }).error).toBeDefined();
+    expect(createAdminAppointmentSchema.validate({ ...valid, treatment: 'דיקור' }).error).toBeDefined();
+  });
+});
+
+// ── Client schemas ──────────────────────────────────────────────────────────────
+
+describe('createClientSchema', () => {
+  const valid = { name: 'ישראל ישראלי', phone: '0501234567' };
+
+  it('accepts a valid client payload', () => {
+    expect(createClientSchema.validate(valid).error).toBeUndefined();
+  });
+
+  it('requires a name (admin-added clients must be named)', () => {
+    expect(createClientSchema.validate({ phone: '0501234567' }).error).toBeDefined();
+    expect(createClientSchema.validate({ ...valid, name: '' }).error).toBeDefined();
+  });
+
+  it('rejects a name shorter than 2 characters', () => {
+    expect(createClientSchema.validate({ ...valid, name: 'א' }).error).toBeDefined();
+  });
+
+  it('requires a valid Israeli phone', () => {
+    expect(createClientSchema.validate({ ...valid, phone: undefined }).error).toBeDefined();
+    expect(createClientSchema.validate({ ...valid, phone: '0321234567' }).error).toBeDefined();
+  });
+
+  it('accepts only name + phone — rejects any extra field (e.g. email)', () => {
+    expect(createClientSchema.validate({ ...valid, email: 'client@example.com' }).error).toBeDefined();
   });
 });
 
