@@ -36,6 +36,27 @@ Docker**. Before saying something works:
 - `npm --prefix client run build`
 - `make rebuild` (local Docker) and check the running container, not just vite
 
+## Tests and docs are part of "done"
+
+A feature or behavior change is NOT complete until BOTH of these are updated in the
+same change — do this without being asked:
+- **Tests** — add/extend Jest specs in `server/tests/*.spec.ts` for new managers,
+  services, and Joi schemas (validation specs live in `validation.spec.ts`). New
+  endpoint or rule ⇒ new test. Re-run `npm test` and update any test-count
+  references (e.g. README) so they stay accurate.
+- **Docs** — reflect the change everywhere relevant: the root `README.md`
+  (Features / structure), the admin user guide `docs/keren-guide.md`, the client
+  guide `docs/client-guide.md`, and any topic doc under `docs/`. `docs/` is
+  gitignored/local-only but still the source of truth, so keep it current.
+- **Illustrated guides** (`docs/guides/manager-guide.html` + `.pdf`,
+  `client-guide.html` + `.pdf`) — ALWAYS keep these current too: edit the `.html`
+  source, then **regenerate the `.pdf`** in the same change (don't hand-edit the
+  binary, don't leave it stale). Regenerate with headless Chrome:
+  `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=docs/guides/manager-guide.pdf file://<abs>/docs/guides/manager-guide.html`
+  Each `.page` div is one A4 sheet (297mm ≈ 1123px @96dpi) — after editing, confirm
+  no page overflowed (the page-div count must equal the PDF page count) and that
+  footer numbers/chapter numbers stay sequential.
+
 ## Docker parity
 
 Any change to env vars, build args, or services must be reflected in EVERY Docker

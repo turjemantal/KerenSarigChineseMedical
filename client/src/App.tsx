@@ -7,13 +7,13 @@ import Dashboard from './components/Dashboard'
 import ClientPortal from './components/ClientPortal'
 import AdminLogin from './components/AdminLogin'
 import { AccessibilityStatement, PrivacyPolicy } from './components/Legal'
-import { getToken, getAdminToken } from './auth'
+import { hasValidClientToken, hasValidAdminToken, adminSessionExpired, ADMIN_UNAUTHORIZED_EVENT } from './auth'
 
 function PublicView() {
   const navigate = useNavigate()
   const [booking, setBooking] = useState(false)
   const [contact, setContact] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(!!getToken())
+  const [isLoggedIn, setIsLoggedIn] = useState(hasValidClientToken())
 
   return (
     <>
@@ -25,7 +25,7 @@ function PublicView() {
       />
       <BookingModal
         open={booking}
-        onClose={() => { setBooking(false); setIsLoggedIn(!!getToken()) }}
+        onClose={() => { setBooking(false); setIsLoggedIn(hasValidClientToken()) }}
         onPortal={() => navigate('/portal')}
       />
       <ContactModal open={contact} onClose={() => setContact(false)} />
@@ -35,9 +35,16 @@ function PublicView() {
 
 function ManagerView() {
   const navigate = useNavigate()
-  const [isAdmin, setIsAdmin] = useState(!!getAdminToken())
+  const [isAdmin, setIsAdmin] = useState(hasValidAdminToken())
+  const [expired, setExpired] = useState(adminSessionExpired())
 
-  if (!isAdmin) return <AdminLogin onSuccess={() => setIsAdmin(true)} />
+  useEffect(() => {
+    const onUnauthorized = () => { setIsAdmin(false); setExpired(true) }
+    window.addEventListener(ADMIN_UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(ADMIN_UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [])
+
+  if (!isAdmin) return <AdminLogin expired={expired} onSuccess={() => { setExpired(false); setIsAdmin(true) }} />
   return <Dashboard onExit={() => navigate('/')} />
 }
 

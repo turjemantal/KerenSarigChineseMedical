@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { ClientsService } from '../src/clients/clients.service';
 import { ClientsDao } from '../src/clients/clients.dao';
 
@@ -32,6 +33,22 @@ describe('ClientsService', () => {
       const result = await service.findAll();
       expect(result).toHaveLength(2);
       expect(mockDao.findAll).toHaveBeenCalled();
+    });
+  });
+
+  describe('create', () => {
+    it('creates a new client when the phone is free', async () => {
+      mockDao.findByPhone.mockResolvedValueOnce(null);
+      mockDao.create.mockResolvedValueOnce(newClient);
+      const result = await service.create({ phone: '0509876543', name: 'Charlie' });
+      expect(mockDao.create).toHaveBeenCalledWith('0509876543', 'Charlie');
+      expect(result).toBe(newClient);
+    });
+
+    it('rejects a phone that already belongs to a client', async () => {
+      mockDao.findByPhone.mockResolvedValueOnce(existingClient);
+      await expect(service.create({ phone: '0501234567', name: 'Dup' })).rejects.toThrow(BadRequestException);
+      expect(mockDao.create).not.toHaveBeenCalled();
     });
   });
 

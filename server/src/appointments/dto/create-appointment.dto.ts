@@ -1,3 +1,5 @@
+import { AppointmentStatus } from '../../common/enums/appointment-status.enum';
+
 export class CreateAppointmentDto {
   name?: string;
   phone?: string;
@@ -8,4 +10,5 @@ export class CreateAppointmentDto {
   time: string;
   notes?: string;
   source?: string;
+  status?: AppointmentStatus; // set server-side only (e.g. admin-created appointments)
 }

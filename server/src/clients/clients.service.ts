@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ClientsDao } from './clients.dao';
 import { ClientDocument } from './client.schema';
+import { CreateClientDto } from './dto/create-client.dto';
+import { ERRORS } from '../common/constants/errors.constants';
 
 @Injectable()
 export class ClientsService {
@@ -8,6 +10,13 @@ export class ClientsService {
 
   findAll(): Promise<ClientDocument[]> {
     return this.dao.findAll();
+  }
+
+  // admin-created client — phone must be free (it's the unique key)
+  async create(dto: CreateClientDto): Promise<ClientDocument> {
+    const existing = await this.dao.findByPhone(dto.phone);
+    if (existing) throw new BadRequestException(ERRORS.CLIENT_ALREADY_EXISTS);
+    return this.dao.create(dto.phone, dto.name);
   }
 
   findByPhone(phone: string): Promise<ClientDocument | null> {

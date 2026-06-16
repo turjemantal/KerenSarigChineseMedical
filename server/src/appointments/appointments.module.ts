@@ -7,12 +7,14 @@ import { AppointmentsService } from './appointments.service';
 import { AppointmentsDao } from './appointments.dao';
 import { ScheduleBlocksModule } from '../schedule-blocks/schedule-blocks.module';
 import { WeeklyScheduleModule } from '../weekly-schedule/weekly-schedule.module';
+import { ClientsModule } from '../clients/clients.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Appointment.name, schema: AppointmentSchema }]),
     ScheduleBlocksModule,
     WeeklyScheduleModule,
+    ClientsModule,
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsManager, AppointmentsService, AppointmentsDao],

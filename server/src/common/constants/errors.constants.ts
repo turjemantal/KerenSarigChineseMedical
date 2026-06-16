@@ -51,6 +51,7 @@ export const ERRORS = {
   TIME_IN_PAST: 'לא ניתן לקבוע תור לשעה שכבר עברה',
   CLOSED_WEEKDAY: 'הקליניקה סגורה ביום זה',
   EXTRA_SLOT_EXISTS: 'השעה כבר פתוחה או תפוסה בתאריך זה',
+  CLIENT_ALREADY_EXISTS: 'לקוח עם מספר טלפון זה כבר קיים',
 
   // rate limiting
   OTP_COOLDOWN: 'כבר נשלח קוד למספר זה. המתינו רגע לפני בקשת קוד חדש.',

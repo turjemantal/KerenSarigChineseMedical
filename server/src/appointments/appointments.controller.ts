@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
-import { createAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
+import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
 import { AuthUser } from '../auth/jwt.strategy';
 
 @Controller('appointments')
@@ -30,6 +30,14 @@ export class AppointmentsController {
     @Body(new JoiValidationPipe(createAppointmentSchema)) dto: CreateAppointmentDto,
   ) {
     return this.manager.book(dto, { phone: user.phone, name: user.name });
+  }
+
+  @UseGuards(AdminAuthGuard)
+  @Post('admin')
+  createForClient(
+    @Body(new JoiValidationPipe(createAdminAppointmentSchema)) dto: CreateAppointmentDto,
+  ) {
+    return this.manager.bookForClient(dto);
   }
 
   @UseGuards(AdminAuthGuard)
