@@ -6,8 +6,7 @@ import { ExtraSlotDocument } from './extra-slot.schema';
 import { CreateScheduleBlockDto } from './dto/create-schedule-block.dto';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { ERRORS } from '../common/constants/errors.constants';
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+import { MS_PER_DAY } from '../common/constants/time.constants';
 
 export interface PublicScheduleBlock {
   startDate: string;

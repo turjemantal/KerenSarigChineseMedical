@@ -13,7 +13,9 @@ const usePretty = !isProd && process.stdout.isTTY;
 //  - PROD: single-line JSON to stdout (parsed by the log shipper → Better Stack)
 //  - DEV : pretty, colourised, human-readable
 //  - TEST: silent (no noise in the test runner)
-//  - sensitive fields are redacted; request bodies are never logged
+//  - request payloads (bodies) ARE logged (via LoggingInterceptor) so we can see
+//    what actually happened; only credentials are redacted (auth/cookie headers,
+//    OTP codes, passwords) — never log those.
 export const loggerConfig: Params = {
   pinoHttp: {
     level: process.env.LOG_LEVEL ?? (isProd ? 'info' : 'debug'),
@@ -25,7 +27,13 @@ export const loggerConfig: Params = {
       res.setHeader('x-request-id', id);
       return id;
     },
-    autoLogging: true,
+    // emit string level names ("info"/"error") instead of pino's numeric codes (30/50)
+    formatters: {
+      level: (label: string) => ({ level: label }),
+    },
+    // the LoggingInterceptor emits one structured line per request — disable
+    // pino-http's own "request completed" line to avoid duplication.
+    autoLogging: false,
     // never log headers/cookies/bodies — only the safe request shape.
     // prefer req.ip (Express + trust proxy = real client IP) over the raw socket
     // address, which behind nginx is just the proxy's internal Docker IP.
@@ -38,8 +46,18 @@ export const loggerConfig: Params = {
       }),
       res: (res) => ({ statusCode: res.statusCode }),
     },
+    // Redact credentials wherever they appear (headers + logged request bodies).
+    // Payloads are logged on purpose; secrets are not.
     redact: {
-      paths: ['req.headers.authorization', 'req.headers.cookie'],
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'body.code',
+        'body.otp',
+        'body.password',
+        'body.token',
+        '*.password',
+      ],
       remove: true,
     },
     transport: usePretty

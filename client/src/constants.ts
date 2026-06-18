@@ -34,6 +34,14 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 
 export const APPOINTMENT_DURATION_MINUTES = 50
 
+// mirrors server schedule.constants.ts — free reschedule/cancel window (hours before
+// the appointment) and how far ahead a client may book.
+export const FREE_CANCELLATION_HOURS = 24
+export const MAX_BOOKING_AHEAD_DAYS = 30
+
+export const MS_PER_HOUR = 60 * 60 * 1000
+export const MS_PER_DAY = 24 * MS_PER_HOUR
+
 // mirrors server PHONE_REGEX (validation.constants.ts)
 export const PHONE_REGEX = /^05\d{8}$/
 
@@ -79,4 +87,19 @@ export interface ExtraSlot {
   _id: string
   date: string
   time: string
+}
+
+// Shared availability parser — validates { 'YYYY-MM-DD': string[] } shape.
+// Any entry that doesn't match (error objects, unexpected shapes) is dropped so
+// callers never receive garbage that would throw during render.
+export function parseAvailability(raw: unknown): Record<string, string[]> {
+  const src =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {}
+  const out: Record<string, string[]> = {}
+  for (const [k, v] of Object.entries(src)) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Array.isArray(v)) out[k] = v as string[]
+  }
+  return out
 }

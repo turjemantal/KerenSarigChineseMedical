@@ -13,37 +13,6 @@ export const TESTIMONIAL_VIDEOS: TestimonialVideo[] = MEDIA_BASE_URL
     }))
   : []
 
-export const TREATMENTS = [
-  {
-    id: 'women', name: 'בריאות האישה', chinese: '婦科', icon: 'Leaf',
-    tagline: 'פריון, הריון, הורמונים וגיל המעבר',
-    body: 'ליווי נשים בכל שלבי החיים — פריון, זירוז לידה, היפוך עובר, איזון הורמונלי.',
-    conditions: ['פריון', 'הריון ולידה', 'איזון הורמונלי', 'גיל המעבר'],
-    duration: '60–75 דקות',
-  },
-  {
-    id: 'skeleton', name: 'שלד ושריר', chinese: '筋骨', icon: 'Needle',
-    tagline: 'כאבי גב, צוואר, סיאטיקה ומיגרנות',
-    body: 'בלט ופריצות דיסק, סיאטיקה, כאבי גב וצוואר, פיברומיאלגיה, מיגרנות.',
-    conditions: ['פריצות דיסק', 'סיאטיקה', 'כאבי צוואר', 'מיגרנות'],
-    duration: '60 דקות',
-  },
-  {
-    id: 'breath', name: 'מערכת הנשימה', chinese: '呼吸', icon: 'Cup',
-    tagline: 'איזון הריאות, הלב והכליות',
-    body: 'אסטמה, אלרגיות עונתיות, קוצר נשימה, ברונכיטיס ודלקות חוזרות.',
-    conditions: ['אסטמה', 'אלרגיות', 'שיעול כרוני', 'חרדה ושינה'],
-    duration: '45–60 דקות',
-  },
-  {
-    id: 'digest', name: 'מערכת העיכול', chinese: '脾胃', icon: 'Leaf2',
-    tagline: '״אם כל המחלות״ — לפי הרמב״ם',
-    body: 'קרוהן, מעי רגיז, דלקות בקיבה ובושט, עצירות, נפיחות ושלשולים.',
-    conditions: ['מעי רגיז', 'קרוהן', 'עצירות ונפיחות', 'צרבות'],
-    duration: '60 דקות',
-  },
-]
-
 export const AREAS: Record<string, {
   id: string; chinese: string; tag: string; shortTag?: string; title: string; intro: string;
   items: { h: string; b: string }[]

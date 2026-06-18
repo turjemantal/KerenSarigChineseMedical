@@ -5,6 +5,11 @@ export const config = {
   get isTest(): boolean {
     return process.env.APP_ENV === AppEnv.Test;
   },
+  // PROD is the only environment that talks to the outside world (real
+  // SMS/WhatsApp). DEV and TEST never send — see the integration providers.
+  get isProd(): boolean {
+    return process.env.APP_ENV === AppEnv.Prod;
+  },
 
   get port(): number {
     return Number(process.env.PORT ?? '3001');
@@ -82,6 +87,10 @@ export const config = {
       },
       get newBookingAlert(): string {
         return process.env.WHATSAPP_TEMPLATE_NEW_BOOKING_ALERT || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
+      },
+      // falls back to the confirmation template until a dedicated lead_alert template is approved
+      get newLeadAlert(): string {
+        return process.env.WHATSAPP_TEMPLATE_LEAD_ALERT || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },
       get appointmentReminder(): string {
         return process.env.WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER!;

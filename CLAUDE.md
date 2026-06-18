@@ -77,8 +77,26 @@ Before committing, confirm:
   manager. Validate ObjectIds before querying (return 404, not a 500/CastError).
 - **Bounds** — cap public range/list endpoints (e.g. `MAX_PUBLIC_RANGE_DAYS`) so
   they can't be used to dump data; rely on the global throttler for rate limits.
-- **No PII / secrets in logs** — phones masked via `maskPhone`; headers redacted;
-  bodies never logged.
+- **PII-minimized logs — never full numbers, names, or health text** — the global
+  `LoggingInterceptor` logs one structured line per request (`fn`, `request` {method,
+  url, body}, `response` {status[, error]}, `durationMs`, reqId). The request body is
+  sanitized: phone is **masked** (`maskPhone`) and `name`/`email`/`concern`/`notes`
+  are **dropped** (`LOG_DROP_BODY_FIELDS`/`LOG_MASK_BODY_FIELDS` in
+  `logging.constants.ts`). Responses are summarised to status/error (never the full
+  record or tokens). Credentials (OTP/password/token) are dropped here AND redacted
+  by the pino `redact` config. **Every** logger follows this — including the
+  SMS/WhatsApp providers (mask the recipient, never log message text) and business
+  summary logs (`maskPhone`). The full PII lives only in the DB, looked up by id.
+  Logs ship to a third-party (Better Stack), so this is mandatory, not optional.
+- **Constants & enums, never magic values** — host lists, status strings, time
+  windows, etc. live in `common/constants` / `common/enums` (e.g.
+  `LOCAL_DB_HOSTS`, `HealthStatus`, `FREE_CANCELLATION_HOURS`, `DAILY_REMINDER_HOUR`).
+  Don't inline literals — this is enforced in review.
+- **Environment isolation (DB)** — only `PROD` may use a remote DB. `main.ts`
+  refuses to boot a non-PROD process whose `MONGODB_URI` host isn't in
+  `LOCAL_DB_HOSTS` (no override flag) so dev/test can never write to production
+  data. Verify prod **read-only only** via `GET /api/health` — never create/mutate
+  prod data to "test" it.
 - **No secrets in git** — scan the diff for tokens/passwords before pushing.
 
 ## Secrets
@@ -87,6 +105,12 @@ Never commit secrets. Real values live only in the gitignored `.env`;
 `.env.example` holds placeholders. `docs/` is local-only (gitignored).
 
 ## Deploy
+
+> **NEVER push or merge to `main` without the user's explicit approval.** Because a
+> merge to `main` **is** a production deploy (see below), pushing is irreversible in
+> effect. Default workflow: implement → user tests locally (`npm run dev` and/or
+> `make rebuild`) → user explicitly approves → only then push. Committing locally is
+> fine; pushing to the remote is gated on an explicit "yes, push" each time.
 
 **Auto-deploy (default):** pushing to `main` triggers the `deploy` job in
 `.github/workflows/ci.yml` — it runs only after CI passes, then builds + pushes

@@ -85,4 +85,27 @@ describe('WhatsappMessagingProvider', () => {
       );
     });
   });
+
+  describe('sendNewLeadAlert', () => {
+    it('sends the lead name, phone, and concern as template parameters', async () => {
+      process.env.WHATSAPP_TEMPLATE_LEAD_ALERT = 'lead_alert';
+      await provider.sendNewLeadAlert('0509999999', 'Alice Smith', '0501234567', 'כאב גב');
+      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
+        '0509999999',
+        'lead_alert',
+        ['Alice Smith', '0501234567', 'כאב גב'],
+      );
+      delete process.env.WHATSAPP_TEMPLATE_LEAD_ALERT;
+    });
+
+    it('falls back to booking_confirmation when lead_alert is not configured', async () => {
+      delete process.env.WHATSAPP_TEMPLATE_LEAD_ALERT;
+      await provider.sendNewLeadAlert('0509999999', 'Alice Smith', '0501234567', 'כאב גב');
+      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
+        '0509999999',
+        'booking_confirmation',
+        ['Alice Smith', '0501234567', 'כאב גב'],
+      );
+    });
+  });
 });

@@ -10,6 +10,7 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,tests}/**/*.ts\"",
     "validate:env": "ts-node --transpile-only scripts/validate-env.ts",
+    "deadcode": "npx -y ts-prune",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage"

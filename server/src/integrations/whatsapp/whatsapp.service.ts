@@ -1,15 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { config } from '../../config';
-import { toInternational } from '../../common/utils/phone.utils';
+import { toInternational, maskPhone } from '../../common/utils/phone.utils';
 
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
-  async sendTemplate(to: string, templateName: string, params: string[]): Promise<void> {
+  // Resolves true on a successful hand-off (or a non-sending env), false on failure.
+  async sendTemplate(to: string, templateName: string, params: string[]): Promise<boolean> {
+    // TEST never sends (the suite must stay silent). DEV and PROD both send real
+    // messages — DEV is for verifying the full flow end-to-end locally.
     if (config.isTest) {
-      this.logger.log(`[WhatsApp] TEST mode — skipping "${templateName}" to ${to}`);
-      return;
+      this.logger.log(`[WhatsApp] TEST mode — skipping "${templateName}" to ${maskPhone(to)}`);
+      return true;
     }
 
     const { accessToken, phoneNumberId, apiBase, apiVersion, templateLanguage } = config.whatsapp;
@@ -43,13 +46,15 @@ export class WhatsappService {
 
       const responseText = await res.text();
       if (!res.ok) {
-        this.logger.error(`[WhatsApp] Failed to send "${templateName}" to ${recipient}: ${responseText}`);
-      } else {
-        const messageId = JSON.parse(responseText)?.messages?.[0]?.id ?? 'unknown';
-        this.logger.log(`[WhatsApp] Sent "${templateName}" to ${recipient} (id=${messageId})`);
+        this.logger.error(`[WhatsApp] Failed to send "${templateName}" to ${maskPhone(recipient)}: ${responseText}`);
+        return false;
       }
+      const messageId = JSON.parse(responseText)?.messages?.[0]?.id ?? 'unknown';
+      this.logger.log(`[WhatsApp] Sent "${templateName}" to ${maskPhone(recipient)} (id=${messageId})`);
+      return true;
     } catch (e) {
-      this.logger.error(`[WhatsApp] Network error sending "${templateName}" to ${recipient}: ${e}`);
+      this.logger.error(`[WhatsApp] Network error sending "${templateName}" to ${maskPhone(recipient)}: ${e}`);
+      return false;
     }
   }
 }

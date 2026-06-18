@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { createLeadSchema, updateLeadSchema } from '../src/leads/dto/validations/lead.schemas';
-import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema } from '../src/appointments/dto/validations/appointment.schemas';
+import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema, rescheduleAppointmentSchema } from '../src/appointments/dto/validations/appointment.schemas';
 import { createClientSchema } from '../src/clients/dto/validations/client.schemas';
 import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from '../src/auth/dto/validations/auth.schemas';
 import { JoiValidationPipe } from '../src/common/pipes/joi-validation.pipe';
@@ -124,14 +124,46 @@ describe('createAppointmentSchema', () => {
 });
 
 describe('updateAppointmentSchema', () => {
-  it('accepts every AppointmentStatus enum value', () => {
-    for (const status of Object.values(AppointmentStatus)) {
-      expect(updateAppointmentSchema.validate({ status }).error).toBeUndefined();
-    }
+  it('accepts cancelled status', () => {
+    expect(updateAppointmentSchema.validate({ status: AppointmentStatus.CANCELLED }).error).toBeUndefined();
   });
 
-  it('rejects a status value outside the enum', () => {
+  it('accepts a notes-only update (no status)', () => {
+    expect(updateAppointmentSchema.validate({ notes: 'some notes' }).error).toBeUndefined();
+  });
+
+  it('rejects completed status (use dedicated endpoint instead)', () => {
+    expect(updateAppointmentSchema.validate({ status: AppointmentStatus.COMPLETED }).error).toBeDefined();
+  });
+
+  it('rejects noshow status (use dedicated /noshow endpoint instead)', () => {
+    expect(updateAppointmentSchema.validate({ status: AppointmentStatus.NOSHOW }).error).toBeDefined();
+  });
+
+  it('rejects pending status (booking-only state)', () => {
+    expect(updateAppointmentSchema.validate({ status: AppointmentStatus.PENDING }).error).toBeDefined();
+  });
+
+  it('rejects an arbitrary invalid status value', () => {
     expect(updateAppointmentSchema.validate({ status: 'invalid' }).error).toBeDefined();
+  });
+});
+
+describe('rescheduleAppointmentSchema', () => {
+  const valid = { date: '2026-06-15', time: '10:30' };
+
+  it('accepts a valid date + time', () => {
+    expect(rescheduleAppointmentSchema.validate(valid).error).toBeUndefined();
+  });
+
+  it('requires both date and time', () => {
+    expect(rescheduleAppointmentSchema.validate({ time: '10:30' }).error).toBeDefined();
+    expect(rescheduleAppointmentSchema.validate({ date: '2026-06-15' }).error).toBeDefined();
+  });
+
+  it('rejects a malformed date or time', () => {
+    expect(rescheduleAppointmentSchema.validate({ ...valid, date: '15/06/2026' }).error).toBeDefined();
+    expect(rescheduleAppointmentSchema.validate({ ...valid, time: '24:00' }).error).toBeDefined();
   });
 });
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 import { ScheduleBlocksManager } from '../schedule-blocks/schedule-blocks.manager';
@@ -13,8 +13,9 @@ import { AppointmentStatus } from '../common/enums/appointment-status.enum';
 import { ERRORS } from '../common/constants/errors.constants';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { config } from '../config';
-import { ADMIN_SOURCE } from '../common/constants/defaults.constants';
-import { MAX_BOOKING_AHEAD_DAYS } from '../common/constants/schedule.constants';
+import { ADMIN_SOURCE, CLINIC_TIMEZONE } from '../common/constants/defaults.constants';
+import { MAX_BOOKING_AHEAD_DAYS, DAILY_REMINDER_HOUR, AUTO_COMPLETE_HOUR, FREE_CANCELLATION_HOURS } from '../common/constants/schedule.constants';
+import { MS_PER_HOUR, MS_PER_DAY } from '../common/constants/time.constants';
 import { clinicToday, clinicTimeNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
 import { maskPhone } from '../common/utils/phone.utils';
 import { computeAvailableSlots } from './availability.util';
@@ -89,10 +90,13 @@ export class AppointmentsManager {
     return appt;
   }
 
-  // fire-and-forget messaging, but log the outcome tied to the appointment id
-  private notify(kind: string, apptId: string, p: Promise<void>): void {
-    p.then(() => this.logger.log(`[Appointment] sms=${kind} sent appt=${apptId}`))
-      .catch((e) => this.logger.error(`[Appointment] sms=${kind} FAILED appt=${apptId}: ${e}`));
+  // fire-and-forget messaging, but log the real outcome tied to the appointment id
+  private notify(kind: string, apptId: string, p: Promise<boolean>): void {
+    p.then((ok) =>
+      ok
+        ? this.logger.log(`[Appointment] sms=${kind} sent appt=${apptId}`)
+        : this.logger.warn(`[Appointment] sms=${kind} not sent appt=${apptId}`),
+    ).catch((e) => this.logger.error(`[Appointment] sms=${kind} FAILED appt=${apptId}: ${e}`));
   }
 
   getAll(): Promise<AppointmentDocument[]> {
@@ -112,7 +116,7 @@ export class AppointmentsManager {
       throw new BadRequestException(ERRORS.INVALID_DATE_FORMAT);
     }
     if (to < from) throw new BadRequestException(ERRORS.INVALID_DATE_RANGE);
-    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > MAX_PUBLIC_RANGE_DAYS) {
+    if ((Date.parse(to) - Date.parse(from)) / MS_PER_DAY > MAX_PUBLIC_RANGE_DAYS) {
       throw new BadRequestException(ERRORS.dateRangeTooLarge(MAX_PUBLIC_RANGE_DAYS));
     }
 
@@ -175,9 +179,48 @@ export class AppointmentsManager {
     return this.update(id, { status: AppointmentStatus.CANCELLED });
   }
 
-  // admin approval is just a guarded status transition to scheduled
+  // a client may move their own appointment to a new slot, but only while still in
+  // the free window (more than FREE_CANCELLATION_HOURS before it). Server-authoritative:
+  // ownership, an active status, the free window, and slot availability are all
+  // re-checked here regardless of what the client sent. Status is preserved.
+  async rescheduleOwn(id: string, phone: string, newDate: string, newTime: string): Promise<AppointmentDocument> {
+    const appt = await this.service.findById(id);
+    if (appt.phone !== phone) {
+      throw new ForbiddenException();
+    }
+    if (appt.status !== AppointmentStatus.SCHEDULED && appt.status !== AppointmentStatus.PENDING) {
+      throw new BadRequestException(ERRORS.CANNOT_RESCHEDULE_STATUS);
+    }
+    if (this.hoursUntil(appt.date, appt.time) < FREE_CANCELLATION_HOURS) {
+      throw new BadRequestException(ERRORS.rescheduleTooLate(FREE_CANCELLATION_HOURS));
+    }
+    const available = await this.getAvailability(newDate);
+    if (!available.includes(newTime)) {
+      throw new BadRequestException(ERRORS.SLOT_NOT_AVAILABLE);
+    }
+    const updated = await this.service.update(id, { date: newDate, time: newTime });
+    this.logger.log(
+      `[Appointment] rescheduled appt=${id} phone=${maskPhone(updated.phone)} → ${updated.date} ${updated.time} status=${updated.status}`,
+    );
+    this.notify('reschedule', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
+    return updated;
+  }
+
+  // hours from clinic-now until the given clinic-local date+time. Both sides are
+  // parsed in the same (UTC) frame so the timezone offset cancels and the result is
+  // the true clinic-local gap — mirrors the client's free-window check, authoritatively.
+  private hoursUntil(date: string, time: string): number {
+    const apptMs = Date.parse(`${date}T${time}:00Z`);
+    const nowMs = Date.parse(`${clinicToday()}T${clinicTimeNow()}:00Z`);
+    return (apptMs - nowMs) / MS_PER_HOUR;
+  }
+
   approve(id: string): Promise<AppointmentDocument> {
     return this.update(id, { status: AppointmentStatus.SCHEDULED });
+  }
+
+  markNoShow(id: string): Promise<AppointmentDocument> {
+    return this.update(id, { status: AppointmentStatus.NOSHOW });
   }
 
   async remove(id: string): Promise<void> {
@@ -185,24 +228,53 @@ export class AppointmentsManager {
     this.logger.log(`[Appointment] deleted appt=${id}`);
   }
 
-  @Cron('0 9 * * *')
+  // Pinned to clinic time so it fires at 09:00 Israel regardless of the container's
+  // (UTC) clock, and "tomorrow" is the clinic-local next day — both must agree with
+  // the timezone-aware dates used everywhere else (clinicToday/addDays).
+  @Cron(`0 ${DAILY_REMINDER_HOUR} * * *`, { timeZone: CLINIC_TIMEZONE })
   async sendDailyReminders(): Promise<void> {
-    const tomorrow = this.getTomorrowDate();
+    const tomorrow = addDays(clinicToday(), 1);
     const appointments = await this.service.findScheduledForDate(tomorrow);
 
     this.logger.log(`[Reminders] Sending ${appointments.length} reminder(s) for ${tomorrow}`);
 
     for (const appt of appointments) {
       const id = String(appt._id);
-      await this.messaging.sendAppointmentReminder(appt.phone, appt.time);
-      await this.service.markReminderSent(id);
-      this.logger.log(`[Appointment] reminder sent appt=${id} phone=${maskPhone(appt.phone)} ${appt.time}`);
+      const sent = await this.messaging.sendAppointmentReminder(appt.phone, appt.time);
+      // only mark as reminded when the send actually succeeded — a failed one stays
+      // unmarked so it shows as "not sent" and can be re-sent manually (sendReminder).
+      if (sent) {
+        await this.service.markReminderSent(id);
+        this.logger.log(`[Appointment] reminder sent appt=${id} phone=${maskPhone(appt.phone)} ${appt.time}`);
+      } else {
+        this.logger.warn(`[Appointment] reminder NOT sent (left unmarked) appt=${id} phone=${maskPhone(appt.phone)} ${appt.time}`);
+      }
     }
   }
 
-  private getTomorrowDate(): string {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
+  // Nightly: auto-complete all scheduled appointments from before today.
+  // Runs at AUTO_COMPLETE_HOUR (23:00) so Keren has the full day to mark no-shows.
+  // This keeps the admin list clean and ensures client visit counts are accurate.
+  @Cron(`0 ${AUTO_COMPLETE_HOUR} * * *`, { timeZone: CLINIC_TIMEZONE })
+  async autoCompletePastAppointments(): Promise<void> {
+    const today = clinicToday();
+    const count = await this.service.autoCompleteScheduledBefore(today);
+    if (count > 0) {
+      this.logger.log(`[Appointments] auto-completed ${count} past scheduled appointment(s)`);
+    }
+  }
+
+  // admin: (re)send the reminder for a single appointment on demand — e.g. after a
+  // failed automatic send. Marks it reminded on success; surfaces an error on failure.
+  async sendReminder(id: string): Promise<AppointmentDocument> {
+    const appt = await this.service.findById(id);
+    const sent = await this.messaging.sendAppointmentReminder(appt.phone, appt.time);
+    if (!sent) {
+      this.logger.warn(`[Appointment] manual reminder FAILED appt=${id} phone=${maskPhone(appt.phone)}`);
+      throw new ServiceUnavailableException(ERRORS.REMINDER_SEND_FAILED);
+    }
+    await this.service.markReminderSent(id);
+    this.logger.log(`[Appointment] manual reminder sent appt=${id} phone=${maskPhone(appt.phone)} ${appt.time}`);
+    return appt;
   }
 }

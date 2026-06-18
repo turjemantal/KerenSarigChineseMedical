@@ -97,4 +97,16 @@ describe('SmsMessagingProvider', () => {
       );
     });
   });
+
+  describe('sendNewLeadAlert', () => {
+    it('sends an admin alert with the lead name, phone, and concern', async () => {
+      await provider.sendNewLeadAlert('0509999999', 'Alice Smith', '0501234567', 'כאב גב');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(mockSms.sendSms.mock.calls[0][0]).toBe('0509999999');
+      expect(text).toContain('ליד חדש');
+      expect(text).toContain('Alice Smith');
+      expect(text).toContain('0501234567');
+      expect(text).toContain('כאב גב');
+    });
+  });
 });
