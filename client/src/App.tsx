@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard'
 import ClientPortal from './components/ClientPortal'
 import AdminLogin from './components/AdminLogin'
 import { AccessibilityStatement, PrivacyPolicy } from './components/Legal'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { hasValidClientToken, hasValidAdminToken, adminSessionExpired, ADMIN_UNAUTHORIZED_EVENT } from './auth'
 
 function PublicView() {
@@ -69,14 +70,16 @@ export default function App() {
   }, [])
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<PublicView />} />
-        <Route path="/manager" element={<ManagerView />} />
-        <Route path="/portal" element={<PortalView />} />
-        <Route path="/accessibility" element={<AccessibilityView />} />
-        <Route path="/privacy" element={<PrivacyView />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<PublicView />} />
+          <Route path="/manager" element={<ManagerView />} />
+          <Route path="/portal" element={<PortalView />} />
+          <Route path="/accessibility" element={<AccessibilityView />} />
+          <Route path="/privacy" element={<PrivacyView />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

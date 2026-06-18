@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LeadsManager } from '../src/leads/leads.manager';
 import { LeadsService } from '../src/leads/leads.service';
+import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { CreateLeadDto } from '../src/leads/dto/create-lead.dto';
 import { UpdateLeadDto } from '../src/leads/dto/update-lead.dto';
 
@@ -15,6 +16,12 @@ const mockService = {
   delete: jest.fn(),
 };
 
+const mockMessaging = {
+  sendNewLeadAlert: jest.fn().mockResolvedValue(undefined),
+};
+
+const flushVoidPromises = () => new Promise(r => setTimeout(r, 0));
+
 describe('LeadsManager', () => {
   let manager: LeadsManager;
 
@@ -23,6 +30,7 @@ describe('LeadsManager', () => {
       providers: [
         LeadsManager,
         { provide: LeadsService, useValue: mockService },
+        { provide: MESSAGING_PROVIDER, useValue: mockMessaging },
       ],
     }).compile();
     manager = module.get<LeadsManager>(LeadsManager);
@@ -43,6 +51,33 @@ describe('LeadsManager', () => {
       mockService.create.mockResolvedValueOnce({ ...lead1, email: 'alice@example.com' });
       await manager.submitLead(dto);
       expect(mockService.create).toHaveBeenCalledWith(expect.objectContaining({ email: 'alice@example.com', notes: 'הערה' }));
+    });
+
+    it('alerts the clinic owner about the new lead when ADMIN_PHONE is set', async () => {
+      process.env.ADMIN_PHONE = '0509999999';
+      mockService.create.mockResolvedValueOnce(lead1);
+      await manager.submitLead({ name: 'Alice', phone: '0501111111', concern: 'כאב גב' });
+      await flushVoidPromises();
+      expect(mockMessaging.sendNewLeadAlert).toHaveBeenCalledWith('0509999999', lead1.name, lead1.phone, lead1.concern);
+      delete process.env.ADMIN_PHONE;
+    });
+
+    it('skips the lead alert when ADMIN_PHONE is not set', async () => {
+      delete process.env.ADMIN_PHONE;
+      mockService.create.mockResolvedValueOnce(lead1);
+      await manager.submitLead({ name: 'Alice', phone: '0501111111', concern: 'כאב גב' });
+      await flushVoidPromises();
+      expect(mockMessaging.sendNewLeadAlert).not.toHaveBeenCalled();
+    });
+
+    it('still returns the lead even if the alert fails', async () => {
+      process.env.ADMIN_PHONE = '0509999999';
+      mockService.create.mockResolvedValueOnce(lead1);
+      mockMessaging.sendNewLeadAlert.mockRejectedValueOnce(new Error('sms down'));
+      const result = await manager.submitLead({ name: 'Alice', phone: '0501111111', concern: 'כאב גב' });
+      await flushVoidPromises();
+      expect(result).toMatchObject({ _id: 'l1' });
+      delete process.env.ADMIN_PHONE;
     });
   });
 

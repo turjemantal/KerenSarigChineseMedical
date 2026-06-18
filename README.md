@@ -23,18 +23,19 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 
 ## Features
 
-- **Lead capture** — contact form sends enquiries to the admin dashboard
+- **Lead capture** — contact form sends enquiries to the admin dashboard and alerts the clinic owner (SMS/WhatsApp) on every new lead
 - **OTP login** — passwordless auth via SMS or WhatsApp one-time code
 - **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone)
 - **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer)
 - **Admin-created clients & appointments** — the admin can add a client directly (name required, unique phone) and book a confirmed appointment for an existing client, found via a name/phone search; the slot still passes the server's availability check and the client gets a confirmation SMS
 - **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API
-- **Client portal** — authenticated clients view and cancel their appointments
+- **Client portal** — authenticated clients view, cancel, reschedule, and **book new appointments directly from the portal** (opens the booking calendar in place — no navigation away); reschedule allowed only within the free window, ≥24h before; enforced server-side; after a successful reschedule the card refreshes in place
 - **Session handling** — both admin and client sessions detect an expired/invalid JWT (proactively on load and on any 401) and return to the login screen with a "session expired" notice instead of a stuck view
 - **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
-- **Automated reminders** — cron job at 09:00 sends reminders for next-day appointments
+- **Automated reminders** — cron job at 09:00 clinic time (Asia/Jerusalem) sends reminders for next-day confirmed appointments; a failed send is left unmarked, and the admin can re-send a reminder for any appointment from its detail drawer
+- **Health check** — public `GET /api/health` reports app + DB status (the sanctioned read-only way to verify production)
 - **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection)
-- **Structured logging** — pino JSON logs shipped to Better Stack via a Vector sidecar; masked PII, request IDs, Docker log rotation
+- **Structured logging** — pino JSON logs shipped to Better Stack via a Vector sidecar; masked PII, request IDs, Docker log rotation; one structured line per request with string `level` ("info"/"error") and `fn`/method/url/status
 - **Legal pages** — accessibility statement (`/accessibility`) and privacy policy (`/privacy`) per Israeli law (תקנה 35; חוק הגנת הפרטיות incl. Amendment 13)
 
 ---
@@ -54,7 +55,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (150 tests) |
+| **Testing** | Jest + ts-jest (211 tests) |
 
 ---
 
@@ -68,7 +69,7 @@ kerenWebsite/
 │   │   │   ├── Landing.tsx        # Public site (nav, hero, areas, testimonials…)
 │   │   │   ├── BookingModal.tsx   # OTP login + 4-step booking flow
 │   │   │   ├── ContactModal.tsx   # Lead capture form
-│   │   │   ├── ClientPortal.tsx   # Client appointments + cancellation
+│   │   │   ├── ClientPortal.tsx   # Client appointments + cancel/reschedule
 │   │   │   ├── Dashboard.tsx      # Admin: today, calendar, blocks, appointments…
 │   │   │   ├── AdminLogin.tsx     # Admin password login
 │   │   │   ├── Legal.tsx          # Accessibility statement + privacy policy pages
@@ -177,7 +178,7 @@ Copy `.env.example` to `.env` and fill in values. The server **will not start** 
 | `APP_ENV` | `DEV` / `TEST` / `PROD` |
 | `JWT_SECRET` | Secret for signing JWTs — use `openssl rand -hex 32` |
 | `ADMIN_PASSWORD` | Password for the `/manager` admin dashboard |
-| `ADMIN_PHONE` | *(optional)* clinic owner's phone — gets an alert on every new booking |
+| `ADMIN_PHONE` | *(optional)* clinic owner's phone — gets an alert on every new booking and new lead |
 
 ### Messaging
 
@@ -222,6 +223,7 @@ Required in `DEV` / `PROD`:
 | `WHATSAPP_TEMPLATE_OTP` | Approved template name for OTP |
 | `WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION` | Approved template name for booking confirmation |
 | `WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER` | Approved template name for reminders |
+| `WHATSAPP_TEMPLATE_LEAD_ALERT` | *(optional)* template for new-lead owner alerts (falls back to booking confirmation) |
 | `WHATSAPP_API_VERSION` | API version — default: `v21.0` |
 
 ---
@@ -233,7 +235,7 @@ cd server
 npm test
 ```
 
-184 tests covering auth, appointments (incl. admin-created), leads, clients, SMS provider, WhatsApp provider, and validation.
+211 server-side Jest tests covering auth, appointments (incl. admin-created, reschedule, reminders + manual resend), leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
 
 ---
 

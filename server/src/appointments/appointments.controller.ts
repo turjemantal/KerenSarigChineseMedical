@@ -16,7 +16,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JoiValidationPipe } from '../common/pipes/joi-validation.pipe';
-import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema } from './dto/validations/appointment.schemas';
+import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema, rescheduleAppointmentSchema } from './dto/validations/appointment.schemas';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 
 @Controller('appointments')
@@ -85,10 +86,33 @@ export class AppointmentsController {
     return this.manager.approve(id);
   }
 
+  @UseGuards(AdminAuthGuard)
+  @Patch(':id/noshow')
+  markNoShow(@Param('id') id: string) {
+    return this.manager.markNoShow(id);
+  }
+
+  // admin: manually (re)send the SMS/WhatsApp reminder for an appointment
+  @UseGuards(AdminAuthGuard)
+  @Post(':id/remind')
+  sendReminder(@Param('id') id: string) {
+    return this.manager.sendReminder(id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Patch(':id/cancel')
   cancelOwn(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.manager.cancelOwn(id, user.phone);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/reschedule')
+  rescheduleOwn(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body(new JoiValidationPipe(rescheduleAppointmentSchema)) dto: RescheduleAppointmentDto,
+  ) {
+    return this.manager.rescheduleOwn(id, user.phone, dto.date, dto.time);
   }
 
   @UseGuards(AdminAuthGuard)

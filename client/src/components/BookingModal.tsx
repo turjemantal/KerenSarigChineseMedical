@@ -1,20 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 import { Enso, Chop, Button, Label, FormField } from './shared'
 import { Icon } from './icons'
-import { getClient, getToken, saveAuth, authHeader } from '../auth'
+import { getClient, getToken, saveAuth, authHeader, clientFetch } from '../auth'
 import type { ClientProfile } from '../auth'
-import { APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLINIC_CONTACT } from '../constants'
+import { APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLINIC_CONTACT, parseAvailability } from '../constants'
 
 // ── types ──────────────────────────────────────────────────────────────────────
 interface BookingData {
   date: Date | null
   time: string | null
   concern: string
-  name: string
   notes: string
 }
 
-type ModalStep = 'phone' | 'otp' | 'schedule' | 'details' | 'confirm' | 'done'
+type ModalStep = 'phone' | 'schedule' | 'details' | 'confirm' | 'done'
 
 const toDateStr = (d: Date) => {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -29,17 +28,14 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
   const [step, setStep] = useState<ModalStep>(isLoggedIn ? 'schedule' : 'phone')
   const [client, setClient] = useState<ClientProfile | null>(existingClient)
   const [submitting, setSubmitting] = useState(false)
-  const [data, setData] = useState<BookingData>({
-    date: null, time: null,
-    concern: '',
-    name: existingClient?.name || '', notes: '',
-  })
+  const [bookingError, setBookingError] = useState('')
+  const [data, setData] = useState<BookingData>({ date: null, time: null, concern: '', notes: '' })
 
   useEffect(() => {
     if (open) {
       const c = getClient()
       setClient(c)
-      setData(d => ({ ...d, name: c?.name || '' }))
+      setData({ date: null, time: null, concern: '', notes: '' })
       setStep(getToken() && c ? 'schedule' : 'phone')
       document.body.style.overflow = 'hidden'
     } else {
@@ -58,21 +54,34 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
     const d = data.date
     const pad = (n: number) => String(n).padStart(2, '0')
     const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    setSubmitting(true)
+    setSubmitting(true); setBookingError('')
     try {
-      await fetch('/api/appointments', {
+      const res = await clientFetch('/api/appointments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           concern: data.concern,
           date: dateStr,
           time: data.time,
           notes: data.notes,
+          ...(client?.name ? { name: client.name } : {}),
         }),
       })
-    } catch { /* non-blocking */ } finally {
-      setSubmitting(false)
+      if (!res.ok) {
+        let msg: string = UI_ERRORS.GENERIC
+        try {
+          const body = await res.json()
+          const raw = Array.isArray(body?.message) ? body.message[0] : body?.message
+          if (typeof raw === 'string') msg = raw
+        } catch { /* keep generic */ }
+        setBookingError(msg)
+        return
+      }
       setStep('done')
+    } catch {
+      setBookingError(UI_ERRORS.GENERIC)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -135,9 +144,9 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 md:px-10 pb-6">
-            {step === 'phone'    && <StepPhone    onNext={(c) => { setClient(c); setData(d => ({ ...d, name: c.name || '' })); setStep('schedule') }} />}
+            {step === 'phone'    && <StepPhone    onNext={(c) => { setClient(c); setStep('schedule') }} />}
             {step === 'schedule' && <StepSchedule data={data} update={update} />}
-            {step === 'details'  && <StepDetails  data={data} update={update} client={client} />}
+            {step === 'details'  && <StepDetails  data={data} update={update} />}
             {step === 'confirm'  && <StepConfirm  data={data} client={client} />}
             {step === 'done'     && <StepDone data={data} client={client} onPortal={onPortal} />}
           </div>
@@ -154,7 +163,7 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
           {step === 'details' && (
             <Footer>
               <button onClick={() => setStep('schedule')} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>→ חזרה</button>
-              <Button variant="primary" pill onClick={() => setStep('confirm')} disabled={!client?.name && !data.name.trim()}>
+              <Button variant="primary" pill onClick={() => setStep('confirm')}>
                 המשך <Icon.ArrowLeft />
               </Button>
             </Footer>
@@ -164,6 +173,9 @@ export default function BookingModal({ open, onClose, onPortal }: { open: boolea
               <p className="px-6 md:px-10 pb-3" style={{ fontSize: 11.5, color: '#4A6B5C', lineHeight: 1.6 }}>
                 אישור התור מהווה הסכמה ל<a href="/privacy" target="_blank" style={{ textDecoration: 'underline' }}>מדיניות הפרטיות</a> שלנו. הפרטים ישמשו לתיאום הטיפול ולשליחת עדכונים בלבד.
               </p>
+              {bookingError && (
+                <div className="px-6 md:px-10 pb-2 text-[13px]" style={{ color: '#C4634A' }}>{bookingError}</div>
+              )}
               <Footer>
                 <button onClick={() => setStep('details')} className="text-[14px] hover:underline" style={{ color: '#4A6B5C' }}>→ חזרה</button>
                 <Button variant="primary" pill onClick={handleBooked} disabled={submitting}>
@@ -253,10 +265,18 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
         saveAuth(token, client)
         onNext(client)
       } else {
-        // proceed anyway with local name
-        onNext({ ...verifiedClient!, name: name.trim() })
+        // PATCH failed — persist name locally so the portal never asks again
+        const localClient = { ...verifiedClient!, name: name.trim() }
+        const existingToken = getToken()
+        if (existingToken) saveAuth(existingToken, localClient)
+        onNext(localClient)
       }
-    } catch { onNext({ ...verifiedClient!, name: name.trim() }) } finally { setLoading(false) }
+    } catch {
+      const localClient = { ...verifiedClient!, name: name.trim() }
+      const existingToken = getToken()
+      if (existingToken) saveAuth(existingToken, localClient)
+      onNext(localClient)
+    } finally { setLoading(false) }
   }
 
   return (
@@ -335,11 +355,12 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
 
 // ── Step: Schedule (calendar + time) ──────────────────────────────────────────
 // time-of-day grouping for display (server returns a flat sorted list of free slots)
-const SLOT_PERIOD_LABELS = ['בוקר', 'אחה״צ', 'ערב'] as const
+const SLOT_PERIOD_LABELS = ['בוקר', 'צהריים', 'אחר הצהריים', 'ערב'] as const
 function periodOf(time: string): typeof SLOT_PERIOD_LABELS[number] {
-  if (time < '12:00') return 'בוקר'
-  if (time < '17:00') return 'אחה״צ'
-  return 'ערב'
+  if (time < '12:00') return 'בוקר'           // morning
+  if (time < '15:00') return 'צהריים'          // midday (12:00–14:59)
+  if (time < '18:00') return 'אחר הצהריים'      // afternoon (15:00–17:59)
+  return 'ערב'                                  // evening (18:00+)
 }
 
 function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof BookingData, v: BookingData[keyof BookingData]) => void  }) {
@@ -360,8 +381,8 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
     const from = toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1))
     const to = toDateStr(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0))
     fetch(`/api/appointments/availability?from=${from}&to=${to}`)
-      .then(r => r.json())
-      .then((map: unknown) => setAvailability(map && typeof map === 'object' ? map as Record<string, string[]> : {}))
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setAvailability(parseAvailability(data)))
       .catch(() => setAvailability({}))
   }, [viewMonth])
 
@@ -391,11 +412,11 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
         {/* Calendar */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))} className="w-8 h-8 flex items-center justify-center hover:bg-[#EBE4D6]" style={{ borderRadius: 2 }}>
+            <button aria-label="חודש קודם" onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))} className="w-8 h-8 flex items-center justify-center hover:bg-[#EBE4D6]" style={{ borderRadius: 2 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 6 L15 12 L9 18" /></svg>
             </button>
             <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 18 }}>{hebMonths[viewMonth.getMonth()]} {viewMonth.getFullYear()}</div>
-            <button onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))} className="w-8 h-8 flex items-center justify-center hover:bg-[#EBE4D6]" style={{ borderRadius: 2 }}>
+            <button aria-label="חודש הבא" onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))} className="w-8 h-8 flex items-center justify-center hover:bg-[#EBE4D6]" style={{ borderRadius: 2 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 6 L9 12 L15 18" /></svg>
             </button>
           </div>
@@ -463,17 +484,12 @@ function StepSchedule({ data, update }: { data: BookingData; update: (k: keyof B
 }
 
 // ── Step: Details ──────────────────────────────────────────────────────────────
-function StepDetails({ data, update, client }: { data: BookingData; update: (k: keyof BookingData, v: BookingData[keyof BookingData]) => void; client: ClientProfile | null }) {
+function StepDetails({ data, update }: { data: BookingData; update: (k: keyof BookingData, v: BookingData[keyof BookingData]) => void }) {
   return (
     <div className="py-6">
       <h3 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 32, fontWeight: 400 }}>פרטי הביקור</h3>
       <p className="mt-3" style={{ fontSize: 14.5, lineHeight: 1.7, color: '#2A3D34' }}>שאלה קצרה מראש עוזרת להתכונן לפגישה.</p>
       <div className="mt-8 space-y-5">
-        {!client?.name && (
-          <FormField label="שם מלא" required>
-            <input value={data.name} onChange={e => update('name', e.target.value)} className="field-input" placeholder="שם פרטי ושם משפחה" />
-          </FormField>
-        )}
         <div>
           <Label>מה הסיבה לביקור?</Label>
           <textarea value={data.concern} onChange={e => update('concern', e.target.value)}
@@ -508,7 +524,7 @@ function StepConfirm({ data, client }: { data: BookingData; client: ClientProfil
           <Chop char="約" size={60} rotate={4} />
         </div>
         <div className="mt-5 pt-5 space-y-1" style={{ borderTop: '1px solid rgba(28,42,36,0.1)', fontSize: 13, color: '#4A6B5C' }}>
-          <div className="flex items-center gap-2"><Icon.Users s={13} /> {client?.name || data.name}</div>
+          <div className="flex items-center gap-2"><Icon.Users s={13} /> {client?.name}</div>
           <div className="flex items-center gap-2"><Icon.Phone s={13} /> <span style={{ direction: 'ltr' }}>{client?.phone}</span></div>
           <div className="flex items-center gap-2"><Icon.Pin s={13} /> {CLINIC_CONTACT.address}</div>
           {data.concern && <div className="mt-2" style={{ color: '#2A3D34' }}>״{data.concern}״</div>}
@@ -541,7 +557,7 @@ function StepDone({ data, client, onPortal }: { data: BookingData; client: Clien
         לניהול התורים שלך:{' '}
         {onPortal
           ? <button onClick={onPortal} style={{ color: '#1C2A24', textDecoration: 'underline' }}>האזור האישי</button>
-          : <a href="/?portal" style={{ color: '#1C2A24', textDecoration: 'underline' }}>האזור האישי</a>
+          : <a href="/portal" style={{ color: '#1C2A24', textDecoration: 'underline' }}>האזור האישי</a>
         }
       </p>
     </div>

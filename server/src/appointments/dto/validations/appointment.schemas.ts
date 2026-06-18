@@ -62,8 +62,21 @@ export const createAdminAppointmentSchema = Joi.object({
 
 export const updateAppointmentSchema = Joi.object({
   status: Joi.string()
-    .valid(...Object.values(AppointmentStatus))
+    .valid(AppointmentStatus.CANCELLED)
     .optional()
     .messages({ 'any.only': ERRORS.INVALID_STATUS }),
   notes: Joi.string().max(NOTES_MAX_LENGTH).optional().allow(''),
+});
+
+// client reschedule — only the new slot; ownership + free-window + availability
+// are all enforced server-side in the manager.
+export const rescheduleAppointmentSchema = Joi.object({
+  date: Joi.string().pattern(DATE_REGEX).required().messages({
+    'string.pattern.base': ERRORS.INVALID_DATE_FORMAT,
+    'any.required': ERRORS.REQUIRED_DATE,
+  }),
+  time: Joi.string().pattern(TIME_REGEX).required().messages({
+    'string.pattern.base': ERRORS.INVALID_TIME_FORMAT,
+    'any.required': ERRORS.REQUIRED_TIME,
+  }),
 });

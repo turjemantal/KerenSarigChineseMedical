@@ -22,11 +22,6 @@ export const Chop = ({ char = '醫', size = 64, rotate = -4 }: { char?: string; 
   </div>
 )
 
-// ---------- Ink rule ----------
-export const InkRule = ({ className = '', color = '#1C2A24', opacity = 0.15 }: { className?: string; color?: string; opacity?: number }) => (
-  <div className={className} style={{ height: 1, background: color, opacity, width: '100%' }} />
-)
-
 // ---------- Button ----------
 type ButtonVariant = 'primary' | 'moss' | 'ghost' | 'seal' | 'quiet'
 type ButtonSize = 'sm' | 'md' | 'lg'

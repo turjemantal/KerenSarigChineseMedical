@@ -8,6 +8,7 @@ import {
   LeadStatus,
   LEAD_STATUS_LABELS,
   APPOINTMENT_DURATION_MINUTES,
+  PHONE_REGEX,
   UI_ERRORS,
 } from '../constants'
 import type { ScheduleBlock, ExtraSlot } from '../constants'
@@ -47,8 +48,8 @@ function useLeads() {
     setLoading(true)
     setError(false)
     adminFetch('/api/leads')
-      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Lead[]> })
-      .then(setLeads)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => setLeads(Array.isArray(data) ? data : []))
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }
@@ -64,8 +65,8 @@ function useAppointments() {
     setLoading(true)
     setError(false)
     adminFetch('/api/appointments')
-      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<Appointment[]> })
-      .then(setAppointments)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => setAppointments(Array.isArray(data) ? data : []))
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }
@@ -84,8 +85,8 @@ function useClients() {
   const [clients, setClients] = useState<RegisteredClient[]>([])
   const refresh = () => {
     adminFetch('/api/clients')
-      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<RegisteredClient[]> })
-      .then(setClients)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => setClients(Array.isArray(data) ? data : []))
       .catch(() => {})
   }
   useEffect(refresh, [])
@@ -96,8 +97,8 @@ function useScheduleBlocks() {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
   const refresh = () => {
     adminFetch('/api/schedule-blocks')
-      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<ScheduleBlock[]> })
-      .then(setBlocks)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => setBlocks(Array.isArray(data) ? data : []))
       .catch(() => {})
   }
   useEffect(refresh, [])
@@ -108,8 +109,8 @@ function useExtraSlots() {
   const [extraSlots, setExtraSlots] = useState<ExtraSlot[]>([])
   const refresh = () => {
     adminFetch('/api/schedule-blocks/extra-slots')
-      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<ExtraSlot[]> })
-      .then(setExtraSlots)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => setExtraSlots(Array.isArray(data) ? data : []))
       .catch(() => {})
   }
   useEffect(refresh, [])
@@ -121,8 +122,15 @@ function useWeeklySchedule() {
   const [schedule, setSchedule] = useState<WeekSchedule | null>(null)
   const refresh = () => {
     adminFetch('/api/weekly-schedule')
-      .then(r => { if (!r.ok) throw new Error(); return r.json() as Promise<WeekSchedule> })
-      .then(setSchedule)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => {
+        // guard: expect a plain object; malformed response must not crash WeeklyScheduleView
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          setSchedule(data as WeekSchedule)
+        } else {
+          setSchedule({})
+        }
+      })
       .catch(() => {})
   }
   useEffect(refresh, [])
@@ -1115,14 +1123,22 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [creating, setCreating] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [reminder, setReminder] = useState<'idle' | 'sending' | 'failed'>('idle')
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
   const filterTabs: [string, string][] = [
     ['all', 'הכל'],
     ...Object.values(AppointmentStatus).map(s => [s, APPOINTMENT_STATUS_LABELS[s]] as [string, string]),
   ]
 
-  const updateStatus = async (id: string, status: AppointmentStatus) => {
-    const res = await adminFetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+  const cancelAppointment = async (id: string) => {
+    const res = await adminFetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: AppointmentStatus.Cancelled }) })
+    if (!res.ok) return
+    onStatusChange()
+    setSelected(null)
+  }
+
+  const markNoShow = async (id: string) => {
+    const res = await adminFetch(`/api/appointments/${id}/noshow`, { method: 'PATCH' })
     if (!res.ok) return
     onStatusChange()
     setSelected(null)
@@ -1132,6 +1148,13 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
     if (!await approveAppointment(id)) return
     onStatusChange()
     setSelected(null)
+  }
+
+  const sendReminder = async (id: string) => {
+    setReminder('sending')
+    const res = await adminFetch(`/api/appointments/${id}/remind`, { method: 'POST' })
+    if (res.ok) { onStatusChange(); setReminder('idle'); setSelected(null) }
+    else setReminder('failed')
   }
 
   return (
@@ -1222,7 +1245,7 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
       </div>
 
       {selected && (
-        <Drawer onClose={() => setSelected(null)} title="פרטי תור">
+        <Drawer onClose={() => { setSelected(null); setReminder('idle') }} title="פרטי תור">
           <div className="flex items-center gap-4 mb-6">
             <Avatar name={selected.name} size={54} />
             <div>
@@ -1243,11 +1266,16 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
               <Button variant="primary" onClick={() => void approve(selected._id)} className="w-full">אישור התור</Button>
             )}
             {selected.status === AppointmentStatus.Scheduled && (
-              <Button variant="primary" onClick={() => void updateStatus(selected._id, AppointmentStatus.Completed)} className="w-full">סימון כהושלם</Button>
+              <Button variant="moss" size="sm" onClick={() => void sendReminder(selected._id)} disabled={reminder === 'sending'} className="w-full">
+                {reminder === 'sending' ? 'שולח תזכורת…' : 'שליחת תזכורת'}
+              </Button>
+            )}
+            {reminder === 'failed' && (
+              <div style={{ fontSize: 12.5, color: '#C4634A' }}>שליחת התזכורת נכשלה. נסו שוב.</div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="ghost" onClick={() => void updateStatus(selected._id, AppointmentStatus.Cancelled)}>ביטול תור</Button>
-              <Button variant="quiet" onClick={() => void updateStatus(selected._id, AppointmentStatus.NoShow)}>לא הגיע/ה</Button>
+              <Button variant="ghost" onClick={() => void cancelAppointment(selected._id)}>ביטול תור</Button>
+              <Button variant="quiet" onClick={() => void markNoShow(selected._id)}>לא הגיע/ה</Button>
             </div>
           </div>
         </Drawer>
@@ -1281,8 +1309,8 @@ function NewAppointmentDrawer({ clients, onClose, onCreated }: { clients: Regist
     if (!date) { setSlots([]); return }
     setSlotsLoading(true)
     fetch(`/api/appointments/availability/${date}`)
-      .then(r => r.ok ? r.json() as Promise<string[]> : [])
-      .then(setSlots)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setSlots(Array.isArray(data) ? data : []))
       .catch(() => setSlots([]))
       .finally(() => setSlotsLoading(false))
   }, [date])
@@ -1571,7 +1599,7 @@ function AddClientDrawer({ onClose, onCreated }: { onClose: () => void; onCreate
   const submit = async () => {
     setError('')
     if (name.trim().length < 2) { setError('יש להזין שם'); return }
-    if (!/^05\d{8}$/.test(phone)) { setError('מספר טלפון לא תקין'); return }
+    if (!PHONE_REGEX.test(phone)) { setError(UI_ERRORS.INVALID_PHONE); return }
     setSaving(true)
     try {
       const res = await adminFetch('/api/clients', {

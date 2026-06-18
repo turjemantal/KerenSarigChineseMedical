@@ -35,3 +35,11 @@ export const smsNewBookingAlertText = (name: string, date: string, time: string)
 
 // new_booking_alert template: {{1}} = name, {{2}} = date, {{3}} = time
 export const newBookingAlertParams = bookingParams;
+
+// admin alert — sent to the clinic owner when a new lead arrives from the website
+export const smsNewLeadAlertText = (name: string, phone: string, concern: string): string =>
+  `ליד חדש מהאתר: ${name} (${phone}). פנייה: ${concern}. למעקב: היכנסי לממשק הניהול.`;
+
+// lead_alert template: {{1}} = name, {{2}} = phone, {{3}} = concern
+export const leadAlertParams = (name: string, phone: string, concern: string): string[] =>
+  [name, phone, concern];

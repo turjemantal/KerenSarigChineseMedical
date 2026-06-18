@@ -27,15 +27,16 @@ const mockService = {
   findById: jest.fn(),
   findScheduledForDate: jest.fn(),
   markReminderSent: jest.fn(),
+  autoCompleteScheduledBefore: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
 };
 
 const mockMessaging = {
-  sendBookingRequestReceived: jest.fn().mockResolvedValue(undefined),
-  sendBookingConfirmation: jest.fn().mockResolvedValue(undefined),
-  sendAppointmentReminder: jest.fn().mockResolvedValue(undefined),
-  sendNewBookingAlert: jest.fn().mockResolvedValue(undefined),
+  sendBookingRequestReceived: jest.fn().mockResolvedValue(true),
+  sendBookingConfirmation: jest.fn().mockResolvedValue(true),
+  sendAppointmentReminder: jest.fn().mockResolvedValue(true),
+  sendNewBookingAlert: jest.fn().mockResolvedValue(true),
 };
 
 const mockScheduleBlocks = {
@@ -250,6 +251,48 @@ describe('AppointmentsManager', () => {
     });
   });
 
+  describe('rescheduleOwn', () => {
+    // appt1 is FUTURE_DATE (a week out) → comfortably outside the free window
+    const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+
+    it('moves to a new available slot, keeps the status, and confirms', async () => {
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...scheduled, time: '21:00' });
+      const result = await manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { date: FUTURE_DATE, time: '21:00' });
+      expect(result.status).toBe(AppointmentStatus.SCHEDULED);
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalled();
+    });
+
+    it('forbids rescheduling someone else’s appointment', async () => {
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      await expect(manager.rescheduleOwn('a1', '0509999999', FUTURE_DATE, '21:00')).rejects.toThrow(ForbiddenException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects rescheduling inside the free window (<24h before)', async () => {
+      const soon = { ...scheduled, date: clinicToday(), time: '23:59' };
+      mockService.findById.mockResolvedValueOnce(soon);
+      await expect(manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the new slot is not available', async () => {
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability(); // nothing free
+      await expect(manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects rescheduling a cancelled appointment', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.CANCELLED });
+      await expect(manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('approve', () => {
     it('transitions a pending appointment to scheduled and sends a confirmation', async () => {
       mockService.findById.mockResolvedValueOnce(appt1);
@@ -272,6 +315,28 @@ describe('AppointmentsManager', () => {
     });
   });
 
+  describe('markNoShow', () => {
+    it('sets status to noshow', async () => {
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      const noshow = { ...appt1, status: AppointmentStatus.NOSHOW };
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockService.update.mockResolvedValueOnce(noshow);
+      const result = await manager.markNoShow('a1');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { status: AppointmentStatus.NOSHOW });
+      expect(result.status).toBe(AppointmentStatus.NOSHOW);
+    });
+
+    it('does not send a confirmation message when marking no-show', async () => {
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      const noshow = { ...appt1, status: AppointmentStatus.NOSHOW };
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockService.update.mockResolvedValueOnce(noshow);
+      await manager.markNoShow('a1');
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingConfirmation).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sendDailyReminders', () => {
     it('sends a reminder for each scheduled appointment and marks them sent', async () => {
       mockService.findScheduledForDate.mockResolvedValueOnce([appt1, appt2]);
@@ -286,6 +351,44 @@ describe('AppointmentsManager', () => {
       mockService.findScheduledForDate.mockResolvedValueOnce([]);
       await manager.sendDailyReminders();
       expect(mockMessaging.sendAppointmentReminder).not.toHaveBeenCalled();
+    });
+
+    it('does NOT mark an appointment as reminded when the send fails', async () => {
+      mockService.findScheduledForDate.mockResolvedValueOnce([appt1]);
+      mockMessaging.sendAppointmentReminder.mockResolvedValueOnce(false);
+      await manager.sendDailyReminders();
+      expect(mockService.markReminderSent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sendReminder (manual)', () => {
+    it('sends and marks the appointment reminded on success', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1);
+      const result = await manager.sendReminder('a1');
+      expect(mockMessaging.sendAppointmentReminder).toHaveBeenCalledWith(appt1.phone, appt1.time);
+      expect(mockService.markReminderSent).toHaveBeenCalledWith('a1');
+      expect(result).toMatchObject({ _id: 'a1' });
+    });
+
+    it('throws and does not mark when the send fails', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockMessaging.sendAppointmentReminder.mockResolvedValueOnce(false);
+      await expect(manager.sendReminder('a1')).rejects.toThrow();
+      expect(mockService.markReminderSent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('autoCompletePastAppointments', () => {
+    it('auto-completes past scheduled appointments and logs the count', async () => {
+      mockService.autoCompleteScheduledBefore.mockResolvedValueOnce(3);
+      await manager.autoCompletePastAppointments();
+      expect(mockService.autoCompleteScheduledBefore).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    });
+
+    it('does not log when there are no past scheduled appointments to complete', async () => {
+      mockService.autoCompleteScheduledBefore.mockResolvedValueOnce(0);
+      await manager.autoCompletePastAppointments();
+      expect(mockService.autoCompleteScheduledBefore).toHaveBeenCalled();
     });
   });
 

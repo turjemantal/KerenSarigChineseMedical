@@ -52,6 +52,16 @@ export class AppointmentsDao {
     return this.model.findByIdAndUpdate(id, { reminderSent: true }, { new: true }).exec();
   }
 
+  async autoCompleteScheduledBefore(date: string): Promise<number> {
+    const result = await this.model
+      .updateMany(
+        { status: AppointmentStatus.SCHEDULED, date: { $lte: date } },
+        { $set: { status: AppointmentStatus.COMPLETED } },
+      )
+      .exec();
+    return result.modifiedCount;
+  }
+
   delete(id: string): Promise<AppointmentDocument | null> {
     return this.model.findByIdAndDelete(id).exec();
   }

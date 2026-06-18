@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
-import { Enso, Button, Avatar } from './shared'
+import { useState, useEffect, useCallback } from 'react'
+import { Enso, Button } from './shared'
 import { Icon } from './icons'
 import { getClient, clearAuth, saveAuth, hasValidClientToken, clientSessionExpired, clientFetch, CLIENT_UNAUTHORIZED_EVENT } from '../auth'
 import type { ClientProfile } from '../auth'
-import { AppointmentStatus, APPOINTMENT_STATUS_LABELS, APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS } from '../constants'
+import { AppointmentStatus, APPOINTMENT_STATUS_LABELS, APPOINTMENT_DURATION_MINUTES, FREE_CANCELLATION_HOURS, MAX_BOOKING_AHEAD_DAYS, MS_PER_HOUR, MS_PER_DAY, PHONE_REGEX, UI_ERRORS, parseAvailability } from '../constants'
+import BookingModal from './BookingModal'
 
 interface Appointment {
   _id: string
@@ -19,18 +20,25 @@ function useMyAppointments(token: string | null) {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     if (!token) { setLoading(false); return }
     setLoading(true)
     clientFetch('/api/appointments/mine')
-      .then(r => r.ok ? r.json() : [])
-      .then(setAppointments)
-      .catch(() => {})
+      // Only overwrite the list on a genuine OK response. A transient failure
+      // (rate-limit 429, a blip) must NOT blank the screen to "no appointments" —
+      // keep whatever is already shown until the next successful refresh.
+      .then(r => { if (!r.ok) throw new Error(`mine ${r.status}`); return r.json() })
+      .then(data => setAppointments(Array.isArray(data) ? data : []))
+      .catch(() => { /* keep the existing list */ })
       .finally(() => setLoading(false))
-  }
+  }, [token])
 
-  useEffect(refresh, [token])
-  return { appointments, loading, refresh }
+  const patchAppointment = useCallback((id: string, changes: Partial<Appointment>) =>
+    setAppointments(prev => prev.map(a => a._id === id ? { ...a, ...changes } : a)),
+  [])
+
+  useEffect(() => { refresh() }, [refresh])
+  return { appointments, loading, refresh, patchAppointment }
 }
 
 const HEB_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר']
@@ -46,9 +54,20 @@ function isUpcoming(dateStr: string, time: string): boolean {
   return d > new Date()
 }
 
-function isWithin24Hours(dateStr: string, time: string): boolean {
+// true while inside the charge window (less than the free window before the appt) —
+// drives the cancel warning and hides "change time" (server enforces this too).
+function withinChargeWindow(dateStr: string, time: string): boolean {
   const diff = new Date(`${dateStr}T${time}`).getTime() - Date.now()
-  return diff > 0 && diff < 24 * 60 * 60 * 1000
+  return diff > 0 && diff < FREE_CANCELLATION_HOURS * MS_PER_HOUR
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+function shortDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${HEB_DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`
 }
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
@@ -65,9 +84,10 @@ const STATUS_COLOR: Record<AppointmentStatus, { bg: string; fg: string }> = {
 
 // ── Login flow for portal ──────────────────────────────────────────────────────
 function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientProfile) => void; expired?: boolean }) {
-  const [phase, setPhase] = useState<'phone' | 'otp'>('phone')
+  const [phase, setPhase] = useState<'phone' | 'otp' | 'name'>('phone')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
+  const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -97,6 +117,25 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
       if (!res.ok) { setError(UI_ERRORS.OTP_WRONG); return }
       const { token, client } = await res.json()
       saveAuth(token, client)
+      // Collect the name ONCE here (new registrants have none) so booking never has
+      // to ask later — and there's no mid-session token refresh during booking.
+      if (!client.name) { setPhase('name'); return }
+      onLogin(client)
+    } catch { setError(UI_ERRORS.GENERIC) } finally { setLoading(false) }
+  }
+
+  const submitName = async () => {
+    const n = name.trim()
+    if (!n) return
+    setLoading(true); setError('')
+    try {
+      const res = await clientFetch('/api/auth/me/name', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: n }),
+      })
+      if (!res.ok) throw new Error()
+      const { token, client } = await res.json()
+      saveAuth(token, client)
       onLogin(client)
     } catch { setError(UI_ERRORS.GENERIC) } finally { setLoading(false) }
   }
@@ -117,7 +156,7 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
             פג תוקף ההתחברות, יש להתחבר מחדש.
           </div>
         )}
-        {phase === 'phone' ? (
+        {phase === 'phone' && (
           <>
             <h2 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 28, fontWeight: 400 }}>כניסה לחשבון</h2>
             <p className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.6 }}>הזינו את מספר הטלפון הרשום לשליחת קוד אימות.</p>
@@ -132,7 +171,8 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
               </Button>
             </div>
           </>
-        ) : (
+        )}
+        {phase === 'otp' && (
           <>
             <h2 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 28, fontWeight: 400 }}>קוד אימות</h2>
             <p className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.6 }}>
@@ -153,6 +193,77 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
             </div>
           </>
         )}
+        {phase === 'name' && (
+          <>
+            <h2 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 28, fontWeight: 400 }}>ברוכים הבאים!</h2>
+            <p className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.6 }}>איך קוראים לכם? נשתמש בשם לתיאום הטיפולים.</p>
+            <div className="mt-8 space-y-4">
+              <input value={name} onChange={e => setName(e.target.value)} autoFocus
+                className="field-input" placeholder="שם פרטי ושם משפחה"
+                onKeyDown={e => e.key === 'Enter' && name.trim() && submitName()} />
+              {error && <div className="text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
+              <Button variant="primary" pill onClick={submitName} disabled={loading || !name.trim()} className="w-full">
+                {loading ? 'שומר…' : 'המשך'} <Icon.ArrowLeft />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Name prompt — shown when a valid session exists but name was never collected ──
+function PortalNamePrompt({ client, onSave }: { client: ClientProfile; onSave: (c: ClientProfile) => void }) {
+  const [name, setName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async () => {
+    const n = name.trim()
+    if (!n) return
+    setLoading(true); setError('')
+    try {
+      const res = await clientFetch('/api/auth/me/name', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: n }),
+      })
+      if (!res.ok) {
+        // Server rejected → session is stale (user not in DB). Clear and re-login.
+        clearAuth()
+        window.dispatchEvent(new Event(CLIENT_UNAUTHORIZED_EVENT))
+        return
+      }
+      const { token, client: updated } = await res.json()
+      saveAuth(token, updated)
+      onSave(updated)
+    } catch { setError(UI_ERRORS.GENERIC) } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#F5F1EA' }}>
+      <div className="w-full max-w-[400px] p-8">
+        <div className="flex items-center gap-3 mb-10">
+          <Enso size={36} />
+          <div>
+            <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22 }}>קרן שריג</div>
+            <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#4A6B5C' }}>האזור האישי</div>
+          </div>
+        </div>
+        <h2 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 28, fontWeight: 400 }}>ברוכים הבאים!</h2>
+        <p className="mt-2" style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.6 }}>
+          איך קוראים לכם? נשתמש בשם לתיאום הטיפולים.
+          <span className="block mt-1" style={{ direction: 'ltr', color: '#1C2A24' }}>{client.phone}</span>
+        </p>
+        <div className="mt-8 space-y-4">
+          <input value={name} onChange={e => setName(e.target.value)} autoFocus
+            className="field-input" placeholder="שם פרטי ושם משפחה"
+            onKeyDown={e => e.key === 'Enter' && name.trim() && submit()} />
+          {error && <div className="text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
+          <Button variant="primary" pill onClick={submit} disabled={loading || !name.trim()} className="w-full">
+            {loading ? 'שומר…' : 'המשך'} <Icon.ArrowLeft />
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -162,8 +273,9 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
 export default function ClientPortal({ onExit }: { onExit: () => void }) {
   const [client, setClient] = useState<ClientProfile | null>(getClient)
   const [expired, setExpired] = useState(clientSessionExpired())
+  const [booking, setBooking] = useState(false)
   const hasSession = hasValidClientToken()
-  const { appointments, loading, refresh } = useMyAppointments(client && hasSession ? 'ok' : null)
+  const { appointments, loading, refresh, patchAppointment } = useMyAppointments(client?.name && hasSession ? 'ok' : null)
 
   useEffect(() => {
     const onUnauthorized = () => { setClient(null); setExpired(true) }
@@ -177,17 +289,47 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
     onExit()
   }
 
+  // ── appointment mutations — all use patchAppointment for instant in-place updates.
+  // refresh() is reserved for after a new booking (new ID we can't predict locally).
+
   const cancelAppointment = async (id: string) => {
-    await clientFetch(`/api/appointments/${id}/cancel`, { method: 'PATCH' })
-    refresh()
+    const res = await clientFetch(`/api/appointments/${id}/cancel`, { method: 'PATCH' })
+    if (res.ok) patchAppointment(id, { status: AppointmentStatus.Cancelled })
+  }
+
+  const rescheduleAppointment = async (id: string, date: string, time: string): Promise<{ ok: boolean; error?: string }> => {
+    const res = await clientFetch(`/api/appointments/${id}/reschedule`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, time }),
+    })
+    if (res.ok) { patchAppointment(id, { date, time }); return { ok: true } }
+    let error: string = UI_ERRORS.GENERIC
+    try {
+      const body = await res.json()
+      const msg = Array.isArray(body?.message) ? body.message[0] : body?.message
+      if (typeof msg === 'string') error = msg
+    } catch { /* keep generic */ }
+    return { ok: false, error }
   }
 
   if (!client || !hasSession) {
     return <PortalLogin expired={expired} onLogin={c => { setExpired(false); setClient(c) }} />
   }
 
-  const upcoming = appointments.filter(a => (a.status === AppointmentStatus.Scheduled || a.status === AppointmentStatus.Pending) && isUpcoming(a.date, a.time))
-  const past = appointments.filter(a => !upcoming.includes(a))
+  if (!client.name) {
+    return <PortalNamePrompt client={client} onSave={setClient} />
+  }
+
+  const isUpcomingAppt = (a: Appointment) =>
+    (a.status === AppointmentStatus.Scheduled || a.status === AppointmentStatus.Pending) &&
+    isUpcoming(a.date, a.time)
+
+  const upcoming = appointments.filter(isUpcomingAppt)
+  const past = appointments
+    .filter(a => !isUpcomingAppt(a))
+    .sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime())
+    .slice(0, 10)
 
   return (
     <div className="min-h-screen" style={{ background: '#F5F1EA', color: '#1C2A24' }}>
@@ -201,10 +343,10 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-2">
-            <Avatar name={client.name || client.phone} size={32} />
-            <span style={{ fontSize: 13.5 }}>{client.name || client.phone}</span>
-          </div>
+          {client.name && (
+            <span className="hidden md:block" style={{ fontSize: 13.5 }}>{client.name}</span>
+          )}
+          <Button variant="primary" size="sm" pill onClick={() => setBooking(true)}>קביעת תור</Button>
           <Button variant="ghost" size="sm" pill onClick={handleLogout}>יציאה</Button>
           <button onClick={onExit} className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>← לאתר</button>
         </div>
@@ -216,10 +358,6 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
           <h1 style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 34, fontWeight: 400 }}>
             {client.name ? `שלום, ${client.name.split(' ')[0]}` : 'האזור האישי'}
           </h1>
-          <div className="mt-1 flex items-center gap-2" style={{ fontSize: 13.5, color: '#4A6B5C' }}>
-            <Icon.Phone s={13} />
-            <span style={{ direction: 'ltr' }}>{client.phone}</span>
-          </div>
         </div>
 
         {loading ? (
@@ -234,13 +372,21 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
                   <div style={{ fontSize: 14, color: '#4A6B5C', lineHeight: 1.7 }}>
                     אין תורים מתוזמנים.
                     <br />
-                    <a href="/" style={{ color: '#1C2A24', textDecoration: 'underline' }}>קבעו תור חדש →</a>
+                    <button onClick={() => setBooking(true)} style={{ color: '#1C2A24', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: 'inherit' }}>
+                      קבעו תור חדש →
+                    </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {upcoming.map(a => (
-                    <AppointmentCard key={a._id} appt={a} onCancel={() => cancelAppointment(a._id)} showCancel />
+                    <AppointmentCard
+                      key={a._id}
+                      appt={a}
+                      onCancel={() => cancelAppointment(a._id)}
+                      onReschedule={(date, time) => rescheduleAppointment(a._id, date, time)}
+                      showCancel
+                    />
                   ))}
                 </div>
               )}
@@ -260,13 +406,28 @@ export default function ClientPortal({ onExit }: { onExit: () => void }) {
           </>
         )}
       </main>
+
+      {/* BookingModal — reuse existing component; opens at schedule step since client is already logged in */}
+      <BookingModal
+        open={booking}
+        onClose={() => { setBooking(false); refresh() }}
+        onPortal={() => { setBooking(false); refresh() }}
+      />
     </div>
   )
 }
 
-function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; onCancel?: () => void; showCancel?: boolean }) {
+function AppointmentCard({ appt, onCancel, onReschedule, showCancel }: {
+  appt: Appointment
+  onCancel?: () => void
+  onReschedule?: (date: string, time: string) => Promise<{ ok: boolean; error?: string }>
+  showCancel?: boolean
+}) {
   const [cancelPhase, setCancelPhase] = useState<'idle' | 'confirm' | 'warning'>('idle')
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const s = STATUS_COLOR[appt.status] || STATUS_COLOR[AppointmentStatus.Scheduled]
+  // reschedule is only offered while still in the free window (server enforces it too)
+  const canReschedule = !!onReschedule && !withinChargeWindow(appt.date, appt.time)
 
   return (
     <div className="p-5" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
@@ -291,11 +452,25 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
 
       {showCancel && (appt.status === AppointmentStatus.Scheduled || appt.status === AppointmentStatus.Pending) && (
         <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(28,42,36,0.08)' }}>
-          {cancelPhase === 'idle' && (
-            <button onClick={() => setCancelPhase(isWithin24Hours(appt.date, appt.time) ? 'warning' : 'confirm')}
-              className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>
-              ביטול התור
-            </button>
+          {cancelPhase === 'idle' && !rescheduleOpen && (
+            <div className="flex items-center gap-4">
+              {canReschedule && (
+                <button onClick={() => setRescheduleOpen(true)}
+                  className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>
+                  שינוי מועד
+                </button>
+              )}
+              <button onClick={() => setCancelPhase(appt.status === AppointmentStatus.Scheduled && withinChargeWindow(appt.date, appt.time) ? 'warning' : 'confirm')}
+                className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>
+                ביטול התור
+              </button>
+            </div>
+          )}
+          {rescheduleOpen && onReschedule && (
+            <ReschedulePicker
+              onSubmit={onReschedule}
+              onClose={() => setRescheduleOpen(false)}
+            />
           )}
           {cancelPhase === 'confirm' && (
             <div className="flex items-center gap-3">
@@ -307,7 +482,7 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
           {cancelPhase === 'warning' && (
             <div className="p-3 mb-3" style={{ background: '#FFF8E6', border: '1px solid #E8C84A', borderRadius: 2 }}>
               <div style={{ fontSize: 13, color: '#7A5C00', lineHeight: 1.6 }}>
-                ביטול בפחות מ-24 שעות לפני הטיפול עשוי לגרור חיוב של 50% מעלות הטיפול.
+                ביטול בפחות מ-{FREE_CANCELLATION_HOURS} שעות לפני הטיפול עשוי לגרור חיוב של 50% מעלות הטיפול.
               </div>
               <div className="flex items-center gap-3 mt-3">
                 <button onClick={() => { onCancel?.(); setCancelPhase('idle') }} className="text-[13px] px-3 h-8" style={{ background: '#C4634A', color: '#F5F1EA', borderRadius: 999, padding: '0 16px' }}>כן, בטל בכל זאת</button>
@@ -317,6 +492,83 @@ function AppointmentCard({ appt, onCancel, showCancel }: { appt: Appointment; on
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Compact in-card picker for choosing a new slot. Reuses the server-authoritative
+// availability endpoint (same one the booking calendar uses): only genuinely free
+// slots are returned, accounting for closed days, blocks, taken slots, and extras.
+function ReschedulePicker({ onSubmit, onClose }: {
+  onSubmit: (date: string, time: string) => Promise<{ ok: boolean; error?: string }>
+  onClose: () => void
+}) {
+  const [availability, setAvailability] = useState<Record<string, string[]>>({})
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const from = toDateStr(new Date())
+    const to = toDateStr(new Date(Date.now() + MAX_BOOKING_AHEAD_DAYS * MS_PER_DAY))
+    fetch(`/api/appointments/availability?from=${from}&to=${to}`)
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setAvailability(parseAvailability(data)))
+      .catch(() => setAvailability({}))
+  }, [])
+
+  const days = Object.keys(availability).sort()
+  const times = date ? (availability[date] ?? []) : []
+
+  const submit = async () => {
+    if (!date || !time) return
+    setSubmitting(true); setError('')
+    const r = await onSubmit(date, time)
+    setSubmitting(false)
+    if (r.ok) {
+      onClose()
+    } else {
+      setError(r.error || UI_ERRORS.GENERIC)
+    }
+  }
+
+  return (
+    <div className="p-4" style={{ background: '#FBF8F1', border: '1px solid rgba(28,42,36,0.12)', borderRadius: 2 }}>
+      <div style={{ fontSize: 13, color: '#2A3D34', marginBottom: 10 }}>בחרו מועד חדש</div>
+      {days.length === 0 ? (
+        <div style={{ fontSize: 13, color: '#4A6B5C' }}>אין מועדים פנויים כרגע.</div>
+      ) : (
+        <>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {days.map(d => (
+              <button key={d} onClick={() => { setDate(d); setTime('') }}
+                className="shrink-0 px-3 h-9 text-[12.5px]"
+                style={{ background: date === d ? '#1C2A24' : '#FFFFFF', color: date === d ? '#F5F1EA' : '#1C2A24', border: `1px solid ${date === d ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2, whiteSpace: 'nowrap' }}>
+                {shortDate(d)}
+              </button>
+            ))}
+          </div>
+          {date && (
+            <div className="grid grid-cols-4 gap-2 mt-3">
+              {times.map(t => (
+                <button key={t} onClick={() => setTime(t)} className="h-9 text-[12.5px]"
+                  style={{ background: time === t ? '#1C2A24' : '#FFFFFF', color: time === t ? '#F5F1EA' : '#1C2A24', border: `1px solid ${time === t ? '#1C2A24' : 'rgba(28,42,36,0.15)'}`, borderRadius: 2, direction: 'ltr' }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {error && <div className="mt-3 text-[12.5px]" style={{ color: '#C4634A' }}>{error}</div>}
+      <div className="flex items-center gap-3 mt-4">
+        <button disabled={!date || !time || submitting} onClick={submit}
+          className="text-[13px] h-8" style={{ background: '#1C2A24', color: '#F5F1EA', borderRadius: 999, padding: '0 16px', opacity: (!date || !time || submitting) ? 0.5 : 1 }}>
+          {submitting ? 'מעדכן…' : 'אישור מועד חדש'}
+        </button>
+        <button onClick={onClose} className="text-[13px] hover:underline" style={{ color: '#4A6B5C' }}>ביטול</button>
+      </div>
     </div>
   )
 }

@@ -52,6 +52,10 @@ export const ERRORS = {
   CLOSED_WEEKDAY: 'הקליניקה סגורה ביום זה',
   EXTRA_SLOT_EXISTS: 'השעה כבר פתוחה או תפוסה בתאריך זה',
   CLIENT_ALREADY_EXISTS: 'לקוח עם מספר טלפון זה כבר קיים',
+  CANNOT_RESCHEDULE_STATUS: 'לא ניתן לשנות מועד עבור תור במצב זה',
+  REMINDER_SEND_FAILED: 'שליחת התזכורת נכשלה. נסו שוב.',
+  rescheduleTooLate: (hours: number) =>
+    `לא ניתן לשנות מועד פחות מ-${hours} שעות לפני התור. ניתן לבטל את התור.`,
 
   // rate limiting
   OTP_COOLDOWN: 'כבר נשלח קוד למספר זה. המתינו רגע לפני בקשת קוד חדש.',

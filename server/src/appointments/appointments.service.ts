@@ -45,6 +45,10 @@ export class AppointmentsService {
     return this.dao.markReminderSent(id);
   }
 
+  autoCompleteScheduledBefore(date: string): Promise<number> {
+    return this.dao.autoCompleteScheduledBefore(date);
+  }
+
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
     if (!isValidObjectId(id)) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     const appt = await this.dao.update(id, dto);

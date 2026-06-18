@@ -26,7 +26,10 @@ export class ClientsService {
   async findOrCreate(phone: string, name?: string): Promise<ClientDocument> {
     const existing = await this.dao.findByPhone(phone);
     if (existing) {
-      if (name && !existing.name) await this.dao.update(phone, name);
+      if (name && !existing.name) {
+        const updated = await this.dao.update(phone, name);
+        return updated ?? existing;
+      }
       return existing;
     }
     return this.dao.create(phone, name);
