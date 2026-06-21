@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { WeeklyScheduleDao } from './weekly-schedule.dao';
-import { WEEKLY_SCHEDULE } from '../common/constants/schedule.constants';
 import { TIME_REGEX } from '../common/constants/validation.constants';
 import { ERRORS } from '../common/constants/errors.constants';
 import { Weekday } from '../common/enums/weekday.enum';
@@ -11,9 +10,19 @@ export type WeekSchedule = Record<Weekday, string[]>;
 export class WeeklyScheduleService {
   constructor(private readonly dao: WeeklyScheduleDao) {}
 
-  // the effective weekly schedule: defaults, overridden by any customised days
+  // the weekly schedule, sourced entirely from the DB. Days with no stored row are
+  // treated as closed (empty). The base schedule is seeded into the DB on deploy
+  // (server/migrations/v2/seed-weekly-schedule.ts) — it is no longer hardcoded in the app.
   async getSchedule(): Promise<WeekSchedule> {
-    const schedule = { ...WEEKLY_SCHEDULE } as WeekSchedule;
+    const schedule: WeekSchedule = {
+      [Weekday.SUNDAY]: [],
+      [Weekday.MONDAY]: [],
+      [Weekday.TUESDAY]: [],
+      [Weekday.WEDNESDAY]: [],
+      [Weekday.THURSDAY]: [],
+      [Weekday.FRIDAY]: [],
+      [Weekday.SATURDAY]: [],
+    };
     for (const day of await this.dao.findAll()) {
       schedule[day.weekday as Weekday] = day.times;
     }

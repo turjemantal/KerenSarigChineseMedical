@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { createLeadSchema, updateLeadSchema } from '../src/leads/dto/validations/lead.schemas';
 import { createAppointmentSchema, createAdminAppointmentSchema, updateAppointmentSchema, rescheduleAppointmentSchema } from '../src/appointments/dto/validations/appointment.schemas';
 import { createClientSchema } from '../src/clients/dto/validations/client.schemas';
+import { updateClinicSettingsSchema } from '../src/clinic-settings/dto/validations/clinic-settings.schemas';
 import { requestOtpSchema, verifyOtpSchema, adminLoginSchema, updateNameSchema } from '../src/auth/dto/validations/auth.schemas';
 import { JoiValidationPipe } from '../src/common/pipes/joi-validation.pipe';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
@@ -164,6 +165,29 @@ describe('rescheduleAppointmentSchema', () => {
   it('rejects a malformed date or time', () => {
     expect(rescheduleAppointmentSchema.validate({ ...valid, date: '15/06/2026' }).error).toBeDefined();
     expect(rescheduleAppointmentSchema.validate({ ...valid, time: '24:00' }).error).toBeDefined();
+  });
+});
+
+describe('updateClinicSettingsSchema', () => {
+  it('accepts a partial patch of either field', () => {
+    expect(updateClinicSettingsSchema.validate({ bookingAheadDays: 183 }).error).toBeUndefined();
+    expect(updateClinicSettingsSchema.validate({ reminderHour: 9 }).error).toBeUndefined();
+    expect(updateClinicSettingsSchema.validate({ bookingAheadDays: 30, reminderHour: 0 }).error).toBeUndefined();
+  });
+
+  it('rejects an empty patch', () => {
+    expect(updateClinicSettingsSchema.validate({}).error).toBeDefined();
+  });
+
+  it('rejects a non-integer or out-of-range bookingAheadDays', () => {
+    expect(updateClinicSettingsSchema.validate({ bookingAheadDays: 0 }).error).toBeDefined();
+    expect(updateClinicSettingsSchema.validate({ bookingAheadDays: 1000 }).error).toBeDefined();
+    expect(updateClinicSettingsSchema.validate({ bookingAheadDays: 30.5 }).error).toBeDefined();
+  });
+
+  it('rejects a reminderHour outside 0–23', () => {
+    expect(updateClinicSettingsSchema.validate({ reminderHour: -1 }).error).toBeDefined();
+    expect(updateClinicSettingsSchema.validate({ reminderHour: 24 }).error).toBeDefined();
   });
 });
 

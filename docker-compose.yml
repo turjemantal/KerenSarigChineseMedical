@@ -3,8 +3,17 @@ services:
     image: mongo:7
     container_name: keren-mongo
     restart: unless-stopped
+    # dev-only: expose Mongo to the host so local scripts (e.g. the weekly-schedule
+    # seed) can connect. Bound to 127.0.0.1 so it's reachable only from this machine,
+    # never the LAN. Prod (docker-compose.prod.yml) never exposes Mongo at all.
+    ports:
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
+      # initDB seed — runs once on a fresh volume to provision the baseline rows the
+      # app reads DB-only (clinic settings + weekly schedule). Dev-only; prod has no
+      # Mongo container (Atlas), so this never applies there.
+      - ./server/migrations/init:/docker-entrypoint-initdb.d:ro
     environment:
       MONGO_INITDB_DATABASE: keren-clinic
     # rotate logs so they never fill the disk (3 files × 10MB per container)

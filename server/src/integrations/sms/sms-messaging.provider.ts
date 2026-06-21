@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SmsService } from './sms.service';
 import { IMessagingProvider } from '../messaging/messaging-provider.interface';
-import { smsOtpText, smsBookingText, smsBookingRequestText, smsReminderText, smsNewBookingAlertText, smsNewLeadAlertText } from '../../common/constants/messages.constants';
+import { smsOtpText, smsBookingText, smsBookingRequestText, smsBookingRejectedText, smsReminderText, smsNewBookingAlertText, smsNewLeadAlertText } from '../../common/constants/messages.constants';
 
 @Injectable()
 export class SmsMessagingProvider implements IMessagingProvider {
@@ -17,6 +17,10 @@ export class SmsMessagingProvider implements IMessagingProvider {
 
   sendBookingConfirmation(phone: string, name: string, date: string, time: string): Promise<boolean> {
     return this.sms.sendSms(phone, smsBookingText(name, date, time));
+  }
+
+  sendBookingRejected(phone: string, name: string, date: string, time: string): Promise<boolean> {
+    return this.sms.sendSms(phone, smsBookingRejectedText(name, date, time));
   }
 
   sendAppointmentReminder(phone: string, time: string): Promise<boolean> {

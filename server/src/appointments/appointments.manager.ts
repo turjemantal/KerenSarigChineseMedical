@@ -3,20 +3,21 @@ import { Cron } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 import { ScheduleBlocksManager } from '../schedule-blocks/schedule-blocks.manager';
 import { WeeklyScheduleManager } from '../weekly-schedule/weekly-schedule.manager';
+import { ClinicSettingsManager } from '../clinic-settings/clinic-settings.manager';
 import { ClientsManager } from '../clients/clients.manager';
 import { AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { MESSAGING_PROVIDER } from '../integrations/messaging/messaging.token';
 import { IMessagingProvider } from '../integrations/messaging/messaging-provider.interface';
-import { AppointmentStatus } from '../common/enums/appointment-status.enum';
+import { AppointmentStatus, isTerminalAppointmentStatus } from '../common/enums/appointment-status.enum';
 import { ERRORS } from '../common/constants/errors.constants';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { config } from '../config';
 import { ADMIN_SOURCE, CLINIC_TIMEZONE } from '../common/constants/defaults.constants';
-import { MAX_BOOKING_AHEAD_DAYS, DAILY_REMINDER_HOUR, AUTO_COMPLETE_HOUR, FREE_CANCELLATION_HOURS } from '../common/constants/schedule.constants';
+import { AUTO_COMPLETE_HOUR, FREE_CANCELLATION_HOURS } from '../common/constants/schedule.constants';
 import { MS_PER_HOUR, MS_PER_DAY } from '../common/constants/time.constants';
-import { clinicToday, clinicTimeNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
+import { clinicToday, clinicTimeNow, clinicHourNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
 import { maskPhone } from '../common/utils/phone.utils';
 import { computeAvailableSlots } from './availability.util';
 
@@ -33,6 +34,7 @@ export class AppointmentsManager {
     private readonly service: AppointmentsService,
     private readonly scheduleBlocks: ScheduleBlocksManager,
     private readonly weeklySchedule: WeeklyScheduleManager,
+    private readonly clinicSettings: ClinicSettingsManager,
     private readonly clients: ClientsManager,
     @Inject(MESSAGING_PROVIDER) private readonly messaging: IMessagingProvider,
   ) {}
@@ -120,15 +122,19 @@ export class AppointmentsManager {
       throw new BadRequestException(ERRORS.dateRangeTooLarge(MAX_PUBLIC_RANGE_DAYS));
     }
 
-    const [appts, blocks, extras, schedule] = await Promise.all([
+    const [appts, blocks, extras, schedule, settings] = await Promise.all([
       this.service.findBetween(from, to),
       this.scheduleBlocks.getBlocksInRange(from, to),
       this.scheduleBlocks.getExtraSlotsInRange(from, to),
       this.weeklySchedule.getSchedule(),
+      this.clinicSettings.getSettings(),
     ]);
+    // fail-closed: with no clinic-settings document (migration not yet run) there is no
+    // booking horizon, so offer no availability rather than guessing a hardcoded one.
+    if (!settings) return {};
     const today = clinicToday();
     const nowTime = clinicTimeNow();
-    const maxDate = addDays(today, MAX_BOOKING_AHEAD_DAYS);
+    const maxDate = addDays(today, settings.bookingAheadDays);
 
     const result: Record<string, string[]> = {};
     for (const date of eachDateInRange(from, to)) {
@@ -157,6 +163,11 @@ export class AppointmentsManager {
 
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
     const existing = await this.service.findById(id);
+    // server-authoritative: a terminal appointment (completed/cancelled/rejected/no-show)
+    // is final — block any status transition out of it (cancel, no-show, approve, …).
+    if (dto.status && dto.status !== existing.status && isTerminalAppointmentStatus(existing.status)) {
+      throw new BadRequestException(ERRORS.CANNOT_CHANGE_TERMINAL_STATUS);
+    }
     const updated = await this.service.update(id, dto);
     if (dto.status && dto.status !== existing.status) {
       this.logger.log(`[Appointment] status appt=${id} ${existing.status} → ${updated.status}`);
@@ -180,25 +191,49 @@ export class AppointmentsManager {
   }
 
   // a client may move their own appointment to a new slot, but only while still in
-  // the free window (more than FREE_CANCELLATION_HOURS before it). Server-authoritative:
-  // ownership, an active status, the free window, and slot availability are all
-  // re-checked here regardless of what the client sent. Status is preserved.
-  async rescheduleOwn(id: string, phone: string, newDate: string, newTime: string): Promise<AppointmentDocument> {
+  // the free window (more than FREE_CANCELLATION_HOURS before it). Ownership and the
+  // free window are enforced; status and slot availability are always re-checked.
+  rescheduleOwn(id: string, phone: string, newDate: string, newTime: string): Promise<AppointmentDocument> {
+    return this.reschedule(id, newDate, newTime, { phone, enforceOwnership: true, enforceWindow: true, approveIfPending: false });
+  }
+
+  // the admin may move any active appointment to any free slot — ownership and the
+  // free window do not apply, but the slot must still be genuinely available so the
+  // admin can't double-book or place an appointment on a closed/past slot. Moving a
+  // still-pending request counts as approving it (she chose the new time herself).
+  rescheduleByAdmin(id: string, newDate: string, newTime: string): Promise<AppointmentDocument> {
+    return this.reschedule(id, newDate, newTime, { enforceOwnership: false, enforceWindow: false, approveIfPending: true });
+  }
+
+  // Shared reschedule core for both the client and admin paths. Server-authoritative:
+  // an active status and slot availability are ALWAYS re-checked; ownership and the
+  // free window are enforced only for the client. A pending request is promoted to
+  // scheduled only on the admin path (approveIfPending) — a client can't self-approve.
+  private async reschedule(
+    id: string,
+    newDate: string,
+    newTime: string,
+    opts: { phone?: string; enforceOwnership: boolean; enforceWindow: boolean; approveIfPending: boolean },
+  ): Promise<AppointmentDocument> {
     const appt = await this.service.findById(id);
-    if (appt.phone !== phone) {
+    if (opts.enforceOwnership && appt.phone !== opts.phone) {
       throw new ForbiddenException();
     }
     if (appt.status !== AppointmentStatus.SCHEDULED && appt.status !== AppointmentStatus.PENDING) {
       throw new BadRequestException(ERRORS.CANNOT_RESCHEDULE_STATUS);
     }
-    if (this.hoursUntil(appt.date, appt.time) < FREE_CANCELLATION_HOURS) {
+    if (opts.enforceWindow && this.hoursUntil(appt.date, appt.time) < FREE_CANCELLATION_HOURS) {
       throw new BadRequestException(ERRORS.rescheduleTooLate(FREE_CANCELLATION_HOURS));
     }
     const available = await this.getAvailability(newDate);
     if (!available.includes(newTime)) {
       throw new BadRequestException(ERRORS.SLOT_NOT_AVAILABLE);
     }
-    const updated = await this.service.update(id, { date: newDate, time: newTime });
+    const promote = opts.approveIfPending && appt.status === AppointmentStatus.PENDING;
+    const updated = await this.service.update(id, { date: newDate, time: newTime, ...(promote && { status: AppointmentStatus.SCHEDULED }) });
+    if (promote) {
+      this.logger.log(`[Appointment] approved-on-reschedule appt=${id} phone=${maskPhone(updated.phone)}`);
+    }
     this.logger.log(
       `[Appointment] rescheduled appt=${id} phone=${maskPhone(updated.phone)} → ${updated.date} ${updated.time} status=${updated.status}`,
     );
@@ -223,16 +258,36 @@ export class AppointmentsManager {
     return this.update(id, { status: AppointmentStatus.NOSHOW });
   }
 
+  // admin: decline a pending request. Only a pending appointment can be rejected; the
+  // client is notified that the request wasn't accepted. (Confirmed appointments that
+  // fall through are CANCELLED, not rejected.)
+  async reject(id: string): Promise<AppointmentDocument> {
+    const appt = await this.service.findById(id);
+    if (appt.status !== AppointmentStatus.PENDING) {
+      throw new BadRequestException(ERRORS.CANNOT_REJECT_STATUS);
+    }
+    const updated = await this.service.update(id, { status: AppointmentStatus.REJECTED });
+    this.logger.log(`[Appointment] rejected appt=${id} phone=${maskPhone(updated.phone)}`);
+    this.notify('rejected', id, this.messaging.sendBookingRejected(updated.phone, updated.name, updated.date, updated.time));
+    return updated;
+  }
+
   async remove(id: string): Promise<void> {
     await this.service.delete(id);
     this.logger.log(`[Appointment] deleted appt=${id}`);
   }
 
-  // Pinned to clinic time so it fires at 09:00 Israel regardless of the container's
-  // (UTC) clock, and "tomorrow" is the clinic-local next day — both must agree with
-  // the timezone-aware dates used everywhere else (clinicToday/addDays).
-  @Cron(`0 ${DAILY_REMINDER_HOUR} * * *`, { timeZone: CLINIC_TIMEZONE })
+  // Runs hourly (pinned to clinic time) and only acts at the admin-configured
+  // reminderHour. The hour lives in the DB, but a @Cron expression is fixed at
+  // class-load, so we wake every hour and gate on the live setting — letting the
+  // admin change the send-hour without a redeploy. "tomorrow" is the clinic-local
+  // next day, matching the timezone-aware dates used everywhere else.
+  @Cron('0 * * * *', { timeZone: CLINIC_TIMEZONE })
   async sendDailyReminders(): Promise<void> {
+    // fail-closed: no clinic-settings document → no configured hour → skip this run
+    const settings = await this.clinicSettings.getSettings();
+    if (!settings || clinicHourNow() !== settings.reminderHour) return;
+
     const tomorrow = addDays(clinicToday(), 1);
     const appointments = await this.service.findScheduledForDate(tomorrow);
 

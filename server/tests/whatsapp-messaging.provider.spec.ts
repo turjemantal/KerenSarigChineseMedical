@@ -75,6 +75,26 @@ describe('WhatsappMessagingProvider', () => {
     });
   });
 
+  describe('sendBookingRejected', () => {
+    it('sends the booking_rejected template when configured', async () => {
+      process.env.WHATSAPP_TEMPLATE_BOOKING_REJECTED = 'booking_rejected';
+      await provider.sendBookingRejected('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
+        '0501234567',
+        'booking_rejected',
+        ['Alice', '1 במאי 2026', '09:00'],
+      );
+      delete process.env.WHATSAPP_TEMPLATE_BOOKING_REJECTED;
+    });
+
+    it('skips the send (returns false, no API call) when the template is not configured', async () => {
+      delete process.env.WHATSAPP_TEMPLATE_BOOKING_REJECTED;
+      const ok = await provider.sendBookingRejected('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      expect(ok).toBe(false);
+      expect(mockWhatsapp.sendTemplate).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sendAppointmentReminder', () => {
     it('sends the time as a template parameter', async () => {
       await provider.sendAppointmentReminder('0501234567', '14:30');

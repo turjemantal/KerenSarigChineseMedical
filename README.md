@@ -25,14 +25,17 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 
 - **Lead capture** — contact form sends enquiries to the admin dashboard and alerts the clinic owner (SMS/WhatsApp) on every new lead
 - **OTP login** — passwordless auth via SMS or WhatsApp one-time code
-- **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone)
-- **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer)
+- **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone), within a configurable booking horizon (default ~6 months ahead)
+- **Editable weekly schedule** — the base bookable hours per weekday live in the DB and are edited from the admin dashboard (no hardcoded schedule); provisioned via the migration/initDB seeds (`server/migrations/`)
+- **Clinic settings** — admin-configurable booking horizon (days ahead) and daily-reminder hour, stored in the DB and editable from the dashboard (no redeploy needed); read DB-only (the app never seeds defaults — see `server/migrations/`)
+- **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer). The admin can also **reject** a pending request (distinct `rejected` status) — the client is notified it couldn't be accommodated
 - **Admin-created clients & appointments** — the admin can add a client directly (name required, unique phone) and book a confirmed appointment for an existing client, found via a name/phone search; the slot still passes the server's availability check and the client gets a confirmation SMS
 - **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API
 - **Client portal** — authenticated clients view, cancel, reschedule, and **book new appointments directly from the portal** (opens the booking calendar in place — no navigation away); reschedule allowed only within the free window, ≥24h before; enforced server-side; after a successful reschedule the card refreshes in place
+- **Admin reschedule** — the admin can move any active appointment to a new slot from its detail drawer, sharing the client's slot-picker and reschedule logic; the admin bypasses the ownership + 24h free-window limits, but the server still re-checks the new slot is genuinely free (no double-booking). Rescheduling a *pending* request auto-approves it (choosing the new time = accepting it)
 - **Session handling** — both admin and client sessions detect an expired/invalid JWT (proactively on load and on any 401) and return to the login screen with a "session expired" notice instead of a stuck view
 - **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
-- **Automated reminders** — cron job at 09:00 clinic time (Asia/Jerusalem) sends reminders for next-day confirmed appointments; a failed send is left unmarked, and the admin can re-send a reminder for any appointment from its detail drawer
+- **Automated reminders** — an hourly cron (clinic time, Asia/Jerusalem) sends reminders for the *next day's* confirmed appointments at the admin-configured hour (default 09:00); a failed send is left unmarked, and the admin can re-send a reminder for any appointment from its detail drawer
 - **Health check** — public `GET /api/health` reports app + DB status (the sanctioned read-only way to verify production)
 - **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection)
 - **Structured logging** — pino JSON logs shipped to Better Stack via a Vector sidecar; masked PII, request IDs, Docker log rotation; one structured line per request with string `level` ("info"/"error") and `fn`/method/url/status
@@ -55,7 +58,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (211 tests) |
+| **Testing** | Jest + ts-jest (240 tests) |
 
 ---
 
@@ -91,15 +94,18 @@ kerenWebsite/
 │   │   │   ├── guards/            # Logging throttler (rate-limit + logs)
 │   │   │   └── utils/             # Clinic-timezone dates, phone normalisation
 │   │   ├── auth/                  # OTP flow, JWT strategy, admin guard
-│   │   ├── appointments/          # Booking rules, approval flow, availability, reminders
+│   │   ├── appointments/          # Booking rules, approval flow, availability, reminders, reschedule
 │   │   ├── schedule-blocks/       # Closed hours / days / vacations
+│   │   ├── weekly-schedule/       # Editable base weekly hours (DB-backed)
+│   │   ├── clinic-settings/       # Configurable booking horizon + reminder hour (DB-backed)
 │   │   ├── leads/                 # Enquiry capture and pipeline
 │   │   ├── clients/               # Registered clients (+ admin listing)
 │   │   └── integrations/
 │   │       ├── messaging/         # IMessagingProvider interface + DI token
 │   │       ├── sms/               # Twilio (API-key auth) implementation
 │   │       └── whatsapp/          # WhatsApp Cloud API implementation
-│   ├── scripts/                   # test-sms.ts — one-off SMS smoke test
+│   ├── migrations/                # init/ (initDB baseline) + versioned migrations (v2/, v3/…), run via `npm run migrate`
+│   ├── scripts/                   # test-sms.ts, validate-env.ts
 │   ├── tests/                     # Jest unit tests
 │   └── Dockerfile
 ├── scripts/                       # Local DB: clean / seed / backup / restore
@@ -223,6 +229,7 @@ Required in `DEV` / `PROD`:
 | `WHATSAPP_TEMPLATE_OTP` | Approved template name for OTP |
 | `WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION` | Approved template name for booking confirmation |
 | `WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER` | Approved template name for reminders |
+| `WHATSAPP_TEMPLATE_BOOKING_REJECTED` | *(optional)* template for the "request declined" notice — no fallback; the WhatsApp notice is skipped until this is approved + set (SMS sends regardless) |
 | `WHATSAPP_TEMPLATE_LEAD_ALERT` | *(optional)* template for new-lead owner alerts (falls back to booking confirmation) |
 | `WHATSAPP_API_VERSION` | API version — default: `v21.0` |
 
@@ -235,7 +242,7 @@ cd server
 npm test
 ```
 
-211 server-side Jest tests covering auth, appointments (incl. admin-created, reschedule, reminders + manual resend), leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
+240 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, configurable reminders + manual resend), weekly schedule, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
 
 ---
 
@@ -252,7 +259,8 @@ make deploy      # Build for linux/amd64 and push to ECR
 ### Database scripts
 
 ```bash
-make db-clean    # Drop all data
+make db-clean    # Drop the keren-clinic DB (keeps the volume → re-run `npm run migrate` to re-provision)
+make db-reset    # Wipe the Mongo volume + rebuild → initDB re-seeds the baseline (settings + weekly schedule)
 make db-seed     # Insert sample clients, appointments, leads
 make db-backup   # Export to ./backups/<timestamp>/
 make db-restore ARCHIVE=backups/.../keren-clinic.archive
@@ -281,6 +289,30 @@ config files and prod `.env`, and restarts EC2. **A merge to `main` is a deploy.
   var fails the deploy instead of breaking prod.
 - One-time setup + day-to-day ops are documented in `docs/cd-pipeline-setup.md`
   (local-only). `make deploy` remains available as a manual fallback.
+
+> **One-time migration — run before the DB-only deploy.** The weekly schedule and the
+> clinic settings (booking horizon + reminder hour) are read **DB-only** — the app never
+> seeds them. Before the first deploy that includes this change, provision them on prod
+> Atlas from an allowlisted host (e.g. the EC2 instance) so the clinic isn't fail-closed
+> (zero availability, no reminders):
+> ```bash
+> cd server && APP_ENV=PROD MONGODB_URI='<prod-atlas-uri>' npm run migrate
+> ```
+> `migrate` runs both seeds (`seed:weekly-schedule` + `seed:clinic-settings`). They're
+> **idempotent** — the schedule fills only weekdays missing a row (never overwriting the
+> admin's edits) and settings insert only if absent — so they're safe to re-run. Verify
+> with admin `GET /api/weekly-schedule` (7 days) and `GET /api/clinic-settings`. Fresh
+> **local** DBs are provisioned automatically by the initDB seed
+> (`server/migrations/init/seed.js`); initDB never runs against prod (Atlas has no Mongo
+> container).
+>
+> **Migration layout & versioning.** `server/migrations/` separates the two concerns:
+> `init/` is the fresh-volume baseline (local only); versioned folders (`v2/`, `v3/`, …)
+> hold the idempotent migrations applied to existing/prod DBs. The current migration is
+> **v2**. To add the next one: create `migrations/v3/`, add its `seed-*.ts`, a
+> `migrate:v3` script, and chain it into `migrate` (`npm run migrate:v2 && npm run
+> migrate:v3`) — migrations are idempotent, so running all versions in order always
+> converges.
 
 ### First-time EC2 setup
 

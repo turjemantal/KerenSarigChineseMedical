@@ -13,6 +13,9 @@ export const bookingParams = (name: string, date: string, time: string): string[
 // booking_request template: {{1}} = first name, {{2}} = date, {{3}} = time
 export const bookingRequestParams = bookingParams;
 
+// booking_rejected template: {{1}} = first name, {{2}} = date, {{3}} = time
+export const bookingRejectedParams = bookingParams;
+
 // appointment_reminder template: {{1}} = time
 export const reminderParams = (time: string): string[] => [time];
 
@@ -28,6 +31,9 @@ export const smsBookingRequestText = (name: string, date: string, time: string):
 
 export const smsReminderText = (time: string): string =>
   `תזכורת: יש לך תור מחר בשעה ${time}. ${CLINIC_NAME}`;
+
+export const smsBookingRejectedText = (name: string, date: string, time: string): string =>
+  `שלום ${name.split(' ')[0]}, לצערנו לא נוכל לקבל את בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time}. נשמח לעזור במועד אחר — ניתן לקבוע מחדש או ליצור קשר. ${CLINIC_NAME}`;
 
 // admin alert — sent to the clinic owner when a new booking arrives
 export const smsNewBookingAlertText = (name: string, date: string, time: string): string =>

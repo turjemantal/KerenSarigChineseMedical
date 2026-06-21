@@ -7,6 +7,7 @@ import { AppointmentsService } from './appointments.service';
 import { AppointmentsDao } from './appointments.dao';
 import { ScheduleBlocksModule } from '../schedule-blocks/schedule-blocks.module';
 import { WeeklyScheduleModule } from '../weekly-schedule/weekly-schedule.module';
+import { ClinicSettingsModule } from '../clinic-settings/clinic-settings.module';
 import { ClientsModule } from '../clients/clients.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { ClientsModule } from '../clients/clients.module';
     MongooseModule.forFeature([{ name: Appointment.name, schema: AppointmentSchema }]),
     ScheduleBlocksModule,
     WeeklyScheduleModule,
+    ClinicSettingsModule,
     ClientsModule,
   ],
   controllers: [AppointmentsController],

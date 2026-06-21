@@ -92,6 +92,13 @@ export class AppointmentsController {
     return this.manager.markNoShow(id);
   }
 
+  // admin: decline a pending appointment request
+  @UseGuards(AdminAuthGuard)
+  @Patch(':id/reject')
+  reject(@Param('id') id: string) {
+    return this.manager.reject(id);
+  }
+
   // admin: manually (re)send the SMS/WhatsApp reminder for an appointment
   @UseGuards(AdminAuthGuard)
   @Post(':id/remind')
@@ -113,6 +120,16 @@ export class AppointmentsController {
     @Body(new JoiValidationPipe(rescheduleAppointmentSchema)) dto: RescheduleAppointmentDto,
   ) {
     return this.manager.rescheduleOwn(id, user.phone, dto.date, dto.time);
+  }
+
+  // admin: move any active appointment to a new slot (no ownership/free-window limit)
+  @UseGuards(AdminAuthGuard)
+  @Patch(':id/reschedule/admin')
+  rescheduleByAdmin(
+    @Param('id') id: string,
+    @Body(new JoiValidationPipe(rescheduleAppointmentSchema)) dto: RescheduleAppointmentDto,
+  ) {
+    return this.manager.rescheduleByAdmin(id, dto.date, dto.time);
   }
 
   @UseGuards(AdminAuthGuard)

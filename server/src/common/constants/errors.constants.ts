@@ -15,6 +15,11 @@ export const ERRORS = {
   INVALID_DATE_FORMAT: 'תאריך לא תקין — נדרש פורמט YYYY-MM-DD',
   INVALID_TIME_FORMAT: 'שעה לא תקינה — נדרש פורמט HH:MM',
   INVALID_WEEKDAY: 'יום בשבוע לא תקין',
+  SETTINGS_EMPTY_PATCH: 'יש לציין לפחות שדה אחד לעדכון',
+  invalidBookingAheadDays: (min: number, max: number) =>
+    `מספר הימים לפתיחת יומן ההזמנות חייב להיות בין ${min} ל-${max}`,
+  invalidReminderHour: (min: number, max: number) =>
+    `שעת התזכורת חייבת להיות בין ${min} ל-${max}`,
   INVALID_PHONE: 'מספר טלפון לא תקין — אנא הזינו מספר ישראלי תקין (05X-XXXXXXX)',
   INVALID_EMAIL: 'כתובת אימייל לא תקינה',
   INVALID_STATUS: 'סטטוס לא תקין',
@@ -53,6 +58,8 @@ export const ERRORS = {
   EXTRA_SLOT_EXISTS: 'השעה כבר פתוחה או תפוסה בתאריך זה',
   CLIENT_ALREADY_EXISTS: 'לקוח עם מספר טלפון זה כבר קיים',
   CANNOT_RESCHEDULE_STATUS: 'לא ניתן לשנות מועד עבור תור במצב זה',
+  CANNOT_REJECT_STATUS: 'ניתן לדחות רק בקשת תור שממתינה לאישור',
+  CANNOT_CHANGE_TERMINAL_STATUS: 'התור כבר נסגר ולא ניתן לשנות את הסטטוס שלו',
   REMINDER_SEND_FAILED: 'שליחת התזכורת נכשלה. נסו שוב.',
   rescheduleTooLate: (hours: number) =>
     `לא ניתן לשנות מועד פחות מ-${hours} שעות לפני התור. ניתן לבטל את התור.`,

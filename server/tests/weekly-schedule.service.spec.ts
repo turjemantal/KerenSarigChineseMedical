@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { WeeklyScheduleService } from '../src/weekly-schedule/weekly-schedule.service';
 import { WeeklyScheduleDao } from '../src/weekly-schedule/weekly-schedule.dao';
-import { WEEKLY_SCHEDULE } from '../src/common/constants/schedule.constants';
 import { Weekday } from '../src/common/enums/weekday.enum';
 
 const mockDao = { findAll: jest.fn(), upsert: jest.fn() };
@@ -19,18 +18,23 @@ describe('WeeklyScheduleService', () => {
   });
 
   describe('getSchedule', () => {
-    it('returns the defaults when nothing is customised', async () => {
+    it('returns every day closed (empty) when the DB has no rows', async () => {
       mockDao.findAll.mockResolvedValueOnce([]);
       const schedule = await service.getSchedule();
-      expect(schedule[Weekday.MONDAY]).toEqual(WEEKLY_SCHEDULE[Weekday.MONDAY]);
-      expect(schedule[Weekday.SATURDAY]).toEqual([]);
+      for (let wd = 0; wd <= 6; wd++) {
+        expect(schedule[wd as Weekday]).toEqual([]);
+      }
     });
 
-    it('overrides only the customised days', async () => {
-      mockDao.findAll.mockResolvedValueOnce([{ weekday: Weekday.SUNDAY, times: ['10:00', '11:00'] }]);
+    it('sources each day entirely from the DB', async () => {
+      mockDao.findAll.mockResolvedValueOnce([
+        { weekday: Weekday.SUNDAY, times: ['10:00', '11:00'] },
+        { weekday: Weekday.MONDAY, times: ['09:00'] },
+      ]);
       const schedule = await service.getSchedule();
-      expect(schedule[Weekday.SUNDAY]).toEqual(['10:00', '11:00']); // was closed by default
-      expect(schedule[Weekday.MONDAY]).toEqual(WEEKLY_SCHEDULE[Weekday.MONDAY]); // unchanged
+      expect(schedule[Weekday.SUNDAY]).toEqual(['10:00', '11:00']);
+      expect(schedule[Weekday.MONDAY]).toEqual(['09:00']);
+      expect(schedule[Weekday.TUESDAY]).toEqual([]); // no row → closed
     });
   });
 

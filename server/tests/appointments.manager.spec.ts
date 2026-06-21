@@ -4,17 +4,19 @@ import { AppointmentsManager } from '../src/appointments/appointments.manager';
 import { AppointmentsService } from '../src/appointments/appointments.service';
 import { ScheduleBlocksManager } from '../src/schedule-blocks/schedule-blocks.manager';
 import { WeeklyScheduleManager } from '../src/weekly-schedule/weekly-schedule.manager';
+import { ClinicSettingsManager } from '../src/clinic-settings/clinic-settings.manager';
 import { ClientsManager } from '../src/clients/clients.manager';
 import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
-import { clinicToday, addDays } from '../src/common/utils/date.utils';
+import { clinicToday, clinicHourNow, addDays } from '../src/common/utils/date.utils';
 
 // a date a week out — within the booking horizon, not in the past. Availability
 // for it is driven via mocked extra slots so the test is weekday-independent.
 const FUTURE_DATE = addDays(clinicToday(), 7);
 const FUTURE_TIME = '20:00'; // never part of the base schedule → must come from an extra
-const BEYOND_HORIZON = addDays(clinicToday(), 60);
+const BEYOND_HORIZON = addDays(clinicToday(), 200); // past the default 183-day horizon
+const DEFAULT_SETTINGS = { bookingAheadDays: 183, reminderHour: clinicHourNow() };
 const appt1 = { _id: 'a1', phone: '0501111111', name: 'Alice', date: FUTURE_DATE, time: FUTURE_TIME, status: AppointmentStatus.PENDING };
 const appt2 = { _id: 'a2', phone: '0502222222', name: 'Bob', date: FUTURE_DATE, time: '10:30', status: AppointmentStatus.PENDING };
 
@@ -35,6 +37,7 @@ const mockService = {
 const mockMessaging = {
   sendBookingRequestReceived: jest.fn().mockResolvedValue(true),
   sendBookingConfirmation: jest.fn().mockResolvedValue(true),
+  sendBookingRejected: jest.fn().mockResolvedValue(true),
   sendAppointmentReminder: jest.fn().mockResolvedValue(true),
   sendNewBookingAlert: jest.fn().mockResolvedValue(true),
 };
@@ -48,6 +51,10 @@ const mockScheduleBlocks = {
 // empty base schedule by default — booking tests drive availability via extra slots
 const EMPTY_SCHEDULE = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
 const mockWeeklySchedule = { getSchedule: jest.fn().mockResolvedValue(EMPTY_SCHEDULE) };
+
+// reminderHour defaults to the current clinic hour so the gated daily-reminder cron
+// "fires" in tests; horizon defaults to the production default (183 days).
+const mockClinicSettings = { getSettings: jest.fn().mockResolvedValue(DEFAULT_SETTINGS) };
 
 const mockClients = {
   findOrCreate: jest.fn().mockResolvedValue({ _id: 'c1' }),
@@ -76,6 +83,7 @@ describe('AppointmentsManager', () => {
         { provide: AppointmentsService, useValue: mockService },
         { provide: ScheduleBlocksManager, useValue: mockScheduleBlocks },
         { provide: WeeklyScheduleManager, useValue: mockWeeklySchedule },
+        { provide: ClinicSettingsManager, useValue: mockClinicSettings },
         { provide: ClientsManager, useValue: mockClients },
         { provide: MESSAGING_PROVIDER, useValue: mockMessaging },
       ],
@@ -83,6 +91,7 @@ describe('AppointmentsManager', () => {
     manager = module.get<AppointmentsManager>(AppointmentsManager);
     jest.clearAllMocks();
     mockWeeklySchedule.getSchedule.mockResolvedValue(EMPTY_SCHEDULE);
+    mockClinicSettings.getSettings.mockResolvedValue(DEFAULT_SETTINGS);
     mockClients.findOrCreate.mockResolvedValue({ _id: 'c1' });
   });
 
@@ -212,9 +221,24 @@ describe('AppointmentsManager', () => {
       expect(slots).not.toContain('21:00');
     });
 
-    it('returns empty beyond the booking horizon (~1 month)', async () => {
+    it('returns empty beyond the configurable booking horizon', async () => {
       mockAvailability({ extras: [{ date: BEYOND_HORIZON, time: '20:00' }] });
       const slots = await manager.getAvailability(BEYOND_HORIZON);
+      expect(slots).toEqual([]);
+    });
+
+    it('honours a shortened horizon from clinic settings', async () => {
+      // with a 5-day horizon, a slot a week out is no longer offered
+      mockClinicSettings.getSettings.mockResolvedValueOnce({ bookingAheadDays: 5, reminderHour: clinicHourNow() });
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      const slots = await manager.getAvailability(FUTURE_DATE);
+      expect(slots).toEqual([]);
+    });
+
+    it('fails closed (no availability) when there is no clinic-settings document', async () => {
+      mockClinicSettings.getSettings.mockResolvedValueOnce(null);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      const slots = await manager.getAvailability(FUTURE_DATE);
       expect(slots).toEqual([]);
     });
   });
@@ -272,6 +296,15 @@ describe('AppointmentsManager', () => {
       expect(mockService.update).not.toHaveBeenCalled();
     });
 
+    it('does NOT auto-approve a client’s own pending request (stays pending)', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...pending, time: '21:00' });
+      await manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { date: FUTURE_DATE, time: '21:00' }); // no status promotion
+    });
+
     it('rejects rescheduling inside the free window (<24h before)', async () => {
       const soon = { ...scheduled, date: clinicToday(), time: '23:59' };
       mockService.findById.mockResolvedValueOnce(soon);
@@ -290,6 +323,54 @@ describe('AppointmentsManager', () => {
       mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.CANCELLED });
       await expect(manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00')).rejects.toThrow(BadRequestException);
       expect(mockService.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rescheduleByAdmin', () => {
+    const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+
+    it('moves to a new available slot regardless of ownership and confirms', async () => {
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...scheduled, time: '21:00' });
+      const result = await manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { date: FUTURE_DATE, time: '21:00' });
+      expect(result.status).toBe(AppointmentStatus.SCHEDULED);
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalled();
+    });
+
+    it('bypasses the free window (can move an appointment inside 24h)', async () => {
+      const soon = { ...scheduled, date: clinicToday(), time: '23:59' };
+      mockService.findById.mockResolvedValueOnce(soon);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...soon, date: FUTURE_DATE, time: '21:00' });
+      await manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { date: FUTURE_DATE, time: '21:00' });
+    });
+
+    it('still rejects an unavailable (taken/blocked/past) slot', async () => {
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability(); // nothing free
+      await expect(manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects rescheduling a cancelled appointment', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.CANCELLED });
+      await expect(manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('auto-approves a still-pending request on admin reschedule (→ scheduled + confirmation)', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...pending, time: '21:00', status: AppointmentStatus.SCHEDULED });
+      await manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { date: FUTURE_DATE, time: '21:00', status: AppointmentStatus.SCHEDULED });
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalled();
     });
   });
 
@@ -312,6 +393,61 @@ describe('AppointmentsManager', () => {
       await manager.update('a1', { status: AppointmentStatus.SCHEDULED });
       await flushVoidPromises();
       expect(mockMessaging.sendBookingConfirmation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('terminal status guard', () => {
+    for (const terminal of [
+      AppointmentStatus.COMPLETED,
+      AppointmentStatus.CANCELLED,
+      AppointmentStatus.REJECTED,
+      AppointmentStatus.NOSHOW,
+    ]) {
+      it(`blocks a status change out of a ${terminal} appointment`, async () => {
+        mockService.findById.mockResolvedValueOnce({ ...appt1, status: terminal });
+        // target SCHEDULED — a genuine transition for every terminal status (re-activating a closed appt)
+        await expect(manager.update('a1', { status: AppointmentStatus.SCHEDULED })).rejects.toThrow(BadRequestException);
+        expect(mockService.update).not.toHaveBeenCalled();
+      });
+    }
+
+    it('still allows a notes-only edit on a terminal appointment (no status change)', async () => {
+      const completed = { ...appt1, status: AppointmentStatus.COMPLETED };
+      mockService.findById.mockResolvedValueOnce(completed);
+      mockService.update.mockResolvedValueOnce({ ...completed, notes: 'x' });
+      await manager.update('a1', { notes: 'x' });
+      expect(mockService.update).toHaveBeenCalledWith('a1', { notes: 'x' });
+    });
+
+    it('markNoShow on a terminal appointment is rejected', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.CANCELLED });
+      await expect(manager.markNoShow('a1')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('cancelOwn on a terminal appointment is rejected', async () => {
+      mockService.findById.mockResolvedValue({ ...appt1, status: AppointmentStatus.REJECTED });
+      await expect(manager.cancelOwn('a1', appt1.phone)).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reject', () => {
+    it('rejects a pending request → REJECTED and notifies the client', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockService.update.mockResolvedValueOnce({ ...pending, status: AppointmentStatus.REJECTED });
+      const result = await manager.reject('a1');
+      expect(mockService.update).toHaveBeenCalledWith('a1', { status: AppointmentStatus.REJECTED });
+      expect(result.status).toBe(AppointmentStatus.REJECTED);
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingRejected).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
+    });
+
+    it('refuses to reject a non-pending (e.g. scheduled) appointment', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
+      await expect(manager.reject('a1')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
     });
   });
 
@@ -358,6 +494,21 @@ describe('AppointmentsManager', () => {
       mockMessaging.sendAppointmentReminder.mockResolvedValueOnce(false);
       await manager.sendDailyReminders();
       expect(mockService.markReminderSent).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the current hour is not the configured reminder hour', async () => {
+      // hourly cron, but the configured send-hour is different → no-op this hour
+      mockClinicSettings.getSettings.mockResolvedValueOnce({ bookingAheadDays: 183, reminderHour: (clinicHourNow() + 1) % 24 });
+      await manager.sendDailyReminders();
+      expect(mockService.findScheduledForDate).not.toHaveBeenCalled();
+      expect(mockMessaging.sendAppointmentReminder).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when there is no clinic-settings document (fail-closed)', async () => {
+      mockClinicSettings.getSettings.mockResolvedValueOnce(null);
+      await manager.sendDailyReminders();
+      expect(mockService.findScheduledForDate).not.toHaveBeenCalled();
+      expect(mockMessaging.sendAppointmentReminder).not.toHaveBeenCalled();
     });
   });
 

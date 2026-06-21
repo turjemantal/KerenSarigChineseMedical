@@ -1,4 +1,4 @@
-.PHONY: up down rebuild logs deploy push-images restart-prod prod-ip prod-logs db-clean db-seed db-backup db-restore
+.PHONY: up down rebuild logs deploy push-images restart-prod prod-ip prod-logs db-clean db-reset db-seed db-backup db-restore
 
 ECR=$(shell aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-central-1.amazonaws.com
 
@@ -52,6 +52,14 @@ prod-logs:
 
 db-clean:
 	@./scripts/clean-db.sh
+
+# Full local reset: delete the Mongo volume and rebuild the stack from scratch, so the
+# initDB seed re-runs (fresh clinic-settings + weekly schedule). Run `make db-seed`
+# afterwards if you also want demo clients/appointments/leads.
+db-reset:
+	docker compose down -v
+	docker compose up -d --build
+	@echo "✅ Fresh stack up — initDB re-seeded the baseline. Run 'make db-seed' for demo data."
 
 db-seed:
 	@./scripts/seed-db.sh

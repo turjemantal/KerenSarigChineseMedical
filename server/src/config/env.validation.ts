@@ -70,6 +70,7 @@ export const envSchema = Joi.object({
   WHATSAPP_TEMPLATE_OTP:                   requiredForWhatsapp,
   WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION:  requiredForWhatsapp,
   WHATSAPP_TEMPLATE_BOOKING_REQUEST:       optionalStr,
+  WHATSAPP_TEMPLATE_BOOKING_REJECTED:      optionalStr,
   WHATSAPP_TEMPLATE_NEW_BOOKING_ALERT:     optionalStr,
   WHATSAPP_TEMPLATE_LEAD_ALERT:            optionalStr,
   WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER:  requiredForWhatsapp,

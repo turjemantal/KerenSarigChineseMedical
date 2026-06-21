@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Enso, Button, Avatar, Label } from './shared'
 import { Icon } from './icons'
 import { clearAdminToken, adminFetch } from '../auth'
+import ReschedulePicker from './ReschedulePicker'
 import {
   AppointmentStatus,
   APPOINTMENT_STATUS_LABELS,
+  isActiveAppointment,
   LeadStatus,
   LEAD_STATUS_LABELS,
   APPOINTMENT_DURATION_MINUTES,
@@ -201,6 +203,7 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: string }) 
     scheduled:  { bg: '#E8F0EB', fg: '#2A5C3F' },
     completed:  { bg: '#EBE4D6', fg: '#5C4A1E' },
     cancelled:  { bg: '#F0EAEA', fg: '#5C2A2A' },
+    rejected:   { bg: '#F0EAEA', fg: '#7A3030' },
     noshow:     { bg: '#FAE8E4', fg: '#8B2A15' },
   }
   const t = tones[tone] || { bg: '#EBE4D6', fg: '#4A3A1E' }
@@ -374,6 +377,16 @@ function TodayView({ appointments, leads, onStatusChange }: { appointments: Appo
     }
   }
 
+  const reject = async (id: string) => {
+    setApprovingId(id)
+    try {
+      const res = await adminFetch(`/api/appointments/${id}/reject`, { method: 'PATCH' })
+      if (res.ok) onStatusChange()
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
   return (
     <div className="p-6 md:p-10">
       <div className="grid md:grid-cols-12 gap-6">
@@ -400,9 +413,12 @@ function TodayView({ appointments, leads, onStatusChange }: { appointments: Appo
                       </div>
                     </div>
                     {a.concern && <div className="hidden md:block flex-1 truncate" style={{ fontSize: 12.5, color: '#2A3D34' }}>״{a.concern}״</div>}
-                    <Button variant="moss" size="sm" onClick={() => void approve(a._id)} disabled={approvingId === a._id}>
-                      {approvingId === a._id ? 'מאשר…' : 'אישור התור'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button variant="moss" size="sm" onClick={() => void approve(a._id)} disabled={approvingId === a._id}>
+                        {approvingId === a._id ? 'מאשר…' : 'אישור התור'}
+                      </Button>
+                      <Button variant="quiet" size="sm" onClick={() => void reject(a._id)} disabled={approvingId === a._id}>דחייה</Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1122,6 +1138,7 @@ function BlocksDrawer({ blocks, extraSlots, onClose, onChange, onExtraChange }: 
 function AppointmentsView({ appointments, clients, onStatusChange }: { appointments: Appointment[]; clients: RegisteredClient[]; onStatusChange: () => void }) {
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [creating, setCreating] = useState(false)
+  const [rescheduling, setRescheduling] = useState(false)
   const [filter, setFilter] = useState('all')
   const [reminder, setReminder] = useState<'idle' | 'sending' | 'failed'>('idle')
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
@@ -1150,11 +1167,37 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
     setSelected(null)
   }
 
+  const reject = async (id: string) => {
+    const res = await adminFetch(`/api/appointments/${id}/reject`, { method: 'PATCH' })
+    if (!res.ok) return
+    onStatusChange()
+    setSelected(null)
+  }
+
   const sendReminder = async (id: string) => {
     setReminder('sending')
     const res = await adminFetch(`/api/appointments/${id}/remind`, { method: 'POST' })
     if (res.ok) { onStatusChange(); setReminder('idle'); setSelected(null) }
     else setReminder('failed')
+  }
+
+  // admin reschedule — reuses the shared ReschedulePicker (same availability source the
+  // client uses) and the admin reschedule route (no ownership/free-window limit, but the
+  // server still re-checks the slot is genuinely free).
+  const rescheduleAppointment = async (id: string, date: string, time: string): Promise<{ ok: boolean; error?: string }> => {
+    const res = await adminFetch(`/api/appointments/${id}/reschedule/admin`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, time }),
+    })
+    if (res.ok) { onStatusChange(); setRescheduling(false); setSelected(null); return { ok: true } }
+    let error: string = UI_ERRORS.GENERIC
+    try {
+      const body = await res.json()
+      const msg = Array.isArray(body?.message) ? body.message[0] : body?.message
+      if (typeof msg === 'string') error = msg
+    } catch { /* keep generic */ }
+    return { ok: false, error }
   }
 
   return (
@@ -1245,7 +1288,7 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
       </div>
 
       {selected && (
-        <Drawer onClose={() => { setSelected(null); setReminder('idle') }} title="פרטי תור">
+        <Drawer onClose={() => { setSelected(null); setReminder('idle'); setRescheduling(false) }} title="פרטי תור">
           <div className="flex items-center gap-4 mb-6">
             <Avatar name={selected.name} size={54} />
             <div>
@@ -1263,7 +1306,10 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
           </div>
           <div className="mt-8 space-y-3">
             {selected.status === AppointmentStatus.Pending && (
-              <Button variant="primary" onClick={() => void approve(selected._id)} className="w-full">אישור התור</Button>
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="primary" onClick={() => void approve(selected._id)}>אישור התור</Button>
+                <Button variant="quiet" onClick={() => void reject(selected._id)}>דחיית הבקשה</Button>
+              </div>
             )}
             {selected.status === AppointmentStatus.Scheduled && (
               <Button variant="moss" size="sm" onClick={() => void sendReminder(selected._id)} disabled={reminder === 'sending'} className="w-full">
@@ -1273,10 +1319,25 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
             {reminder === 'failed' && (
               <div style={{ fontSize: 12.5, color: '#C4634A' }}>שליחת התזכורת נכשלה. נסו שוב.</div>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="ghost" onClick={() => void cancelAppointment(selected._id)}>ביטול תור</Button>
-              <Button variant="quiet" onClick={() => void markNoShow(selected._id)}>לא הגיע/ה</Button>
-            </div>
+            {(selected.status === AppointmentStatus.Scheduled || selected.status === AppointmentStatus.Pending) && (
+              rescheduling ? (
+                <ReschedulePicker
+                  onSubmit={(date, time) => rescheduleAppointment(selected._id, date, time)}
+                  onClose={() => setRescheduling(false)}
+                />
+              ) : (
+                <Button variant="moss" size="sm" onClick={() => setRescheduling(true)} className="w-full">שינוי מועד</Button>
+              )
+            )}
+            {/* terminal appointments (completed/cancelled/rejected/no-show) are final — no actions */}
+            {isActiveAppointment(selected.status) && (
+              <div className={`grid gap-3 ${selected.status === AppointmentStatus.Scheduled ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <Button variant="ghost" onClick={() => void cancelAppointment(selected._id)}>ביטול תור</Button>
+                {selected.status === AppointmentStatus.Scheduled && (
+                  <Button variant="quiet" onClick={() => void markNoShow(selected._id)}>לא הגיע/ה</Button>
+                )}
+              </div>
+            )}
           </div>
         </Drawer>
       )}
@@ -1640,6 +1701,84 @@ function AddClientDrawer({ onClose, onCreated }: { onClose: () => void; onCreate
   )
 }
 
+// ---------- ClinicSettingsCard (booking horizon + reminder hour) ----------
+function ClinicSettingsCard() {
+  const [bookingAheadDays, setBookingAheadDays] = useState<number | ''>('')
+  const [reminderHour, setReminderHour] = useState<number | ''>('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await adminFetch('/api/clinic-settings')
+        if (res.ok) {
+          const s = await res.json()
+          if (!cancelled && s) { setBookingAheadDays(s.bookingAheadDays); setReminderHour(s.reminderHour) }
+        }
+      } finally { if (!cancelled) setLoading(false) }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const save = async () => {
+    if (bookingAheadDays === '' || reminderHour === '') return
+    setSaving(true); setSaved(false); setError('')
+    try {
+      const res = await adminFetch('/api/clinic-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingAheadDays: Number(bookingAheadDays), reminderHour: Number(reminderHour) }),
+      })
+      if (res.ok) { setSaved(true) }
+      else {
+        const body = await res.json().catch(() => null)
+        const msg = Array.isArray(body?.message) ? body.message[0] : body?.message
+        setError(typeof msg === 'string' ? msg : UI_ERRORS.SAVE_FAILED)
+      }
+    } finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="p-4 mb-6" style={{ color: '#4A6B5C', fontSize: 13 }}>טוען הגדרות…</div>
+
+  return (
+    <div className="p-5 mb-8" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+      <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 18, marginBottom: 4 }}>הגדרות יומן</div>
+      <p style={{ fontSize: 13, lineHeight: 1.6, color: '#4A6B5C', marginBottom: 16 }}>
+        עד כמה קדימה נפתח יומן ההזמנות, ובאיזו שעה נשלחות תזכורות התור היומיות.
+      </p>
+      <div className="grid md:grid-cols-2 gap-5">
+        <label className="block">
+          <span style={{ fontSize: 13, color: '#2A3D34' }}>פתיחת יומן (ימים קדימה)</span>
+          <input type="number" min={1} max={366} value={bookingAheadDays}
+            onChange={e => { setSaved(false); setBookingAheadDays(e.target.value === '' ? '' : Number(e.target.value)) }}
+            className="mt-2 w-full h-10 px-3" style={{ border: '1px solid rgba(28,42,36,0.2)', borderRadius: 2, fontSize: 14, direction: 'ltr' }} />
+        </label>
+        <label className="block">
+          <span style={{ fontSize: 13, color: '#2A3D34' }}>שעת שליחת תזכורות</span>
+          <select value={reminderHour}
+            onChange={e => { setSaved(false); setReminderHour(e.target.value === '' ? '' : Number(e.target.value)) }}
+            className="mt-2 w-full h-10 px-3" style={{ border: '1px solid rgba(28,42,36,0.2)', borderRadius: 2, fontSize: 14, direction: 'ltr', background: '#FFFFFF' }}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-5 flex items-center gap-4">
+        <Button variant="primary" size="sm" onClick={() => void save()} disabled={saving || bookingAheadDays === '' || reminderHour === ''}>
+          {saving ? 'שומר…' : 'שמירת הגדרות'}
+        </Button>
+        {saved && <span style={{ fontSize: 13, color: '#3A5C2A' }}>נשמר ✓</span>}
+        {error && <span style={{ fontSize: 13, color: '#C4634A' }}>{error}</span>}
+      </div>
+    </div>
+  )
+}
+
 // ---------- WeeklyScheduleView (edit the recurring weekly hours) ----------
 const HEB_WEEKDAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
 
@@ -1670,6 +1809,7 @@ function WeeklyScheduleView({ schedule, onChange }: { schedule: WeekSchedule | n
 
   return (
     <div className="p-6 md:p-10 max-w-[760px]">
+      <ClinicSettingsCard />
       <p style={{ fontSize: 14, lineHeight: 1.7, color: '#2A3D34' }}>
         זהו הלוח הקבוע שממנו מתחיל כל שבוע — השעות הפנויות לקביעת תור באתר. יום ללא שעות = סגור.
         לפתיחת שעה חד-פעמית ביום מסוים, השתמשי ב<b>יומן ← ניהול זמינות</b>.

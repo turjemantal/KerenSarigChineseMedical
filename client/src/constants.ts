@@ -5,6 +5,7 @@ export const AppointmentStatus = {
   Scheduled: 'scheduled',
   Completed: 'completed',
   Cancelled: 'cancelled',
+  Rejected: 'rejected',
   NoShow: 'noshow',
 } as const
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus]
@@ -14,8 +15,15 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
   [AppointmentStatus.Scheduled]: 'מאושר',
   [AppointmentStatus.Completed]: 'הושלם',
   [AppointmentStatus.Cancelled]: 'בוטל',
+  [AppointmentStatus.Rejected]: 'נדחה',
   [AppointmentStatus.NoShow]: 'לא הגיע',
 }
+
+// Active = the appointment is still in play (pending/scheduled); anything else is a
+// terminal status (completed/cancelled/rejected/no-show) with no further actions.
+// Mirrors the server's isTerminalAppointmentStatus.
+export const isActiveAppointment = (status: AppointmentStatus): boolean =>
+  status === AppointmentStatus.Pending || status === AppointmentStatus.Scheduled
 
 export const LeadStatus = {
   New: 'new',
@@ -35,9 +43,8 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 export const APPOINTMENT_DURATION_MINUTES = 50
 
 // mirrors server schedule.constants.ts — free reschedule/cancel window (hours before
-// the appointment) and how far ahead a client may book.
+// the appointment).
 export const FREE_CANCELLATION_HOURS = 24
-export const MAX_BOOKING_AHEAD_DAYS = 30
 
 export const MS_PER_HOUR = 60 * 60 * 1000
 export const MS_PER_DAY = 24 * MS_PER_HOUR

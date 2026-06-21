@@ -85,6 +85,10 @@ export const config = {
       get bookingRequest(): string {
         return process.env.WHATSAPP_TEMPLATE_BOOKING_REQUEST || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },
+      // a rejection has no sensible fallback — empty until a dedicated template is approved
+      get bookingRejected(): string {
+        return process.env.WHATSAPP_TEMPLATE_BOOKING_REJECTED ?? '';
+      },
       get newBookingAlert(): string {
         return process.env.WHATSAPP_TEMPLATE_NEW_BOOKING_ALERT || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },

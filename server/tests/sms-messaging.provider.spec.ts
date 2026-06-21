@@ -77,6 +77,17 @@ describe('SmsMessagingProvider', () => {
     });
   });
 
+  describe('sendBookingRejected', () => {
+    it('sends a decline SMS with first name, Hebrew date, and time', async () => {
+      await provider.sendBookingRejected('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(text).toContain('Alice');
+      expect(text).toContain('מאי');
+      expect(text).toContain('09:00');
+      expect(text).not.toContain('Smith');
+    });
+  });
+
   describe('sendNewBookingAlert', () => {
     it('sends an admin alert with name, Hebrew date, and time', async () => {
       await provider.sendNewBookingAlert('0509999999', 'Alice Smith', '2026-05-01', '09:00');

@@ -12,6 +12,7 @@ import { LeadsModule } from './leads/leads.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { ScheduleBlocksModule } from './schedule-blocks/schedule-blocks.module';
 import { WeeklyScheduleModule } from './weekly-schedule/weekly-schedule.module';
+import { ClinicSettingsModule } from './clinic-settings/clinic-settings.module';
 import { ClientsModule } from './clients/clients.module';
 import { AuthModule } from './auth/auth.module';
 import { MessagingModule } from './integrations/messaging/messaging.module';
@@ -42,6 +43,7 @@ import { config } from './config';
     AppointmentsModule,
     ScheduleBlocksModule,
     WeeklyScheduleModule,
+    ClinicSettingsModule,
     ClientsModule,
     AuthModule,
   ],

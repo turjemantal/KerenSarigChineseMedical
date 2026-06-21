@@ -26,6 +26,11 @@ export function clinicTimeNow(): string {
   }).format(new Date());
 }
 
+// Current hour (0–23) at the clinic, as a number
+export function clinicHourNow(): number {
+  return Number(clinicTimeNow().slice(0, 2));
+}
+
 // Weekday of a YYYY-MM-DD calendar date (timezone-independent)
 export function weekdayOf(dateStr: string): Weekday {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay() as Weekday;
