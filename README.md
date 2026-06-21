@@ -104,7 +104,7 @@ kerenWebsite/
 │   │       ├── messaging/         # IMessagingProvider interface + DI token
 │   │       ├── sms/               # Twilio (API-key auth) implementation
 │   │       └── whatsapp/          # WhatsApp Cloud API implementation
-│   ├── migrations/                # init/ (initDB baseline) + versioned migrations (v2/, v3/…), run via `npm run migrate`
+│   ├── migrations/                # run.ts (runner) + init/ (initDB baseline) + versioned migrations (v2/, v3/…); `npm run migrate`
 │   ├── scripts/                   # test-sms.ts, validate-env.ts
 │   ├── tests/                     # Jest unit tests
 │   └── Dockerfile
@@ -298,21 +298,20 @@ config files and prod `.env`, and restarts EC2. **A merge to `main` is a deploy.
 > ```bash
 > cd server && APP_ENV=PROD MONGODB_URI='<prod-atlas-uri>' npm run migrate
 > ```
-> `migrate` runs both seeds (`seed:weekly-schedule` + `seed:clinic-settings`). They're
-> **idempotent** — the schedule fills only weekdays missing a row (never overwriting the
-> admin's edits) and settings insert only if absent — so they're safe to re-run. Verify
-> with admin `GET /api/weekly-schedule` (7 days) and `GET /api/clinic-settings`. Fresh
-> **local** DBs are provisioned automatically by the initDB seed
-> (`server/migrations/init/seed.js`); initDB never runs against prod (Atlas has no Mongo
-> container).
+> `npm run migrate` runs the **migration runner** (`server/migrations/run.ts`): it
+> applies every migration not yet recorded in the `_migrations` collection, in order, and
+> records each — so it runs once per DB and is safe to re-run. The migrations are also
+> idempotent (schedule fills only weekdays missing a row, never overwriting the admin's
+> edits; settings insert only if absent). Verify with admin `GET /api/weekly-schedule`
+> (7 days) and `GET /api/clinic-settings`. Fresh **local** DBs are provisioned
+> automatically by the initDB seed (`server/migrations/init/seed.js`); initDB never runs
+> against prod (Atlas has no Mongo container).
 >
 > **Migration layout & versioning.** `server/migrations/` separates the two concerns:
 > `init/` is the fresh-volume baseline (local only); versioned folders (`v2/`, `v3/`, …)
-> hold the idempotent migrations applied to existing/prod DBs. The current migration is
-> **v2**. To add the next one: create `migrations/v3/`, add its `seed-*.ts`, a
-> `migrate:v3` script, and chain it into `migrate` (`npm run migrate:v2 && npm run
-> migrate:v3`) — migrations are idempotent, so running all versions in order always
-> converges.
+> hold the migrations the runner applies to existing/prod DBs. **To add a migration:**
+> drop a file in `migrations/v<N>/` that exports `export async function up()` — the runner
+> auto-discovers it. No `package.json` change.
 
 ### First-time EC2 setup
 
