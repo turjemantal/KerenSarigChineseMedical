@@ -10,11 +10,14 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { MESSAGING_PROVIDER } from '../integrations/messaging/messaging.token';
 import { IMessagingProvider } from '../integrations/messaging/messaging-provider.interface';
+import { GoogleCalendarService } from '../integrations/google-calendar/google-calendar.service';
 import { AppointmentStatus, isTerminalAppointmentStatus } from '../common/enums/appointment-status.enum';
 import { ERRORS } from '../common/constants/errors.constants';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { config } from '../config';
 import { ADMIN_SOURCE, CLINIC_TIMEZONE } from '../common/constants/defaults.constants';
+import { buildGoogleCalendarUrl } from './calendar.utils';
+import { isRealDomain } from '../common/constants/messages.constants';
 import { AUTO_COMPLETE_HOUR, FREE_CANCELLATION_HOURS } from '../common/constants/schedule.constants';
 import { MS_PER_HOUR, MS_PER_DAY } from '../common/constants/time.constants';
 import { clinicToday, clinicTimeNow, clinicHourNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
@@ -37,6 +40,7 @@ export class AppointmentsManager {
     private readonly clinicSettings: ClinicSettingsManager,
     private readonly clients: ClientsManager,
     @Inject(MESSAGING_PROVIDER) private readonly messaging: IMessagingProvider,
+    private readonly calendar: GoogleCalendarService,
   ) {}
 
   async book(dto: CreateAppointmentDto, identity: BookingIdentity): Promise<AppointmentDocument> {
@@ -88,7 +92,8 @@ export class AppointmentsManager {
     this.logger.log(
       `[Appointment] admin-booked appt=${id} phone=${maskPhone(appt.phone)} ${appt.date} ${appt.time} status=${appt.status}`,
     );
-    this.notify('confirmation', id, this.messaging.sendBookingConfirmation(appt.phone, appt.name, appt.date, appt.time));
+    this.notify('confirmation', id, this.messaging.sendBookingConfirmation(appt.phone, appt.name, appt.date, appt.time, this.calendarSmsUrl(id)));
+    this.syncCalendarCreate(id, appt);
     return appt;
   }
 
@@ -99,6 +104,33 @@ export class AppointmentsManager {
         ? this.logger.log(`[Appointment] sms=${kind} sent appt=${apptId}`)
         : this.logger.warn(`[Appointment] sms=${kind} not sent appt=${apptId}`),
     ).catch((e) => this.logger.error(`[Appointment] sms=${kind} FAILED appt=${apptId}: ${e}`));
+  }
+
+  // fire-and-forget calendar sync — errors are logged but never surface to the caller
+  private syncCalendarCreate(apptId: string, appt: AppointmentDocument): void {
+    this.calendar.createEvent(appt).then(async (eventId) => {
+      if (eventId) {
+        await this.service.setCalendarEventId(apptId, eventId);
+        this.logger.log(`[Calendar] event created appt=${apptId}`);
+      }
+    }).catch((e) => this.logger.error(`[Calendar] create failed appt=${apptId}: ${e}`));
+  }
+
+  private syncCalendarUpdate(apptId: string, eventId: string | undefined, appt: AppointmentDocument): void {
+    if (eventId) {
+      this.calendar.updateEvent(eventId, appt)
+        .then(() => this.logger.log(`[Calendar] event updated appt=${apptId}`))
+        .catch((e) => this.logger.error(`[Calendar] update failed appt=${apptId}: ${e}`));
+    } else {
+      this.syncCalendarCreate(apptId, appt);
+    }
+  }
+
+  private syncCalendarDelete(apptId: string, eventId: string | undefined): void {
+    if (!eventId) return;
+    this.calendar.deleteEvent(eventId)
+      .then(() => this.logger.log(`[Calendar] event deleted appt=${apptId}`))
+      .catch((e) => this.logger.error(`[Calendar] delete failed appt=${apptId}: ${e}`));
   }
 
   getAll(): Promise<AppointmentDocument[]> {
@@ -161,6 +193,23 @@ export class AppointmentsManager {
     return this.service.findById(id);
   }
 
+  // Used by CalendarRedirectController — returns the Google Calendar URL for a
+  // SCHEDULED appointment, or null if not found / not in a shareable state.
+  async getCalendarUrl(id: string): Promise<string | null> {
+    const appt = await this.service.findById(id).catch(() => null);
+    if (!appt || appt.status !== AppointmentStatus.SCHEDULED) return null;
+    return buildGoogleCalendarUrl(appt.date, appt.time);
+  }
+
+  // Builds the short calendar redirect URL included in confirmation SMS messages.
+  // Returns undefined for localhost / bare IPs where the link wouldn't be reachable.
+  private calendarSmsUrl(id: string): string | undefined {
+    const domain = new URL(config.clientUrl).hostname;
+    // Calendar links work fine on local IPs (same-network redirect); only skip for
+    // localhost where the URL is unreachable from the patient's device.
+    return domain !== 'localhost' ? `${config.clientUrl}/cal/${id}` : undefined;
+  }
+
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
     const existing = await this.service.findById(id);
     // server-authoritative: a terminal appointment (completed/cancelled/rejected/no-show)
@@ -176,7 +225,13 @@ export class AppointmentsManager {
       existing.status === AppointmentStatus.PENDING && updated.status === AppointmentStatus.SCHEDULED;
     if (approved) {
       this.logger.log(`[Appointment] approved appt=${id} phone=${maskPhone(updated.phone)}`);
-      this.notify('confirmation', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
+      this.notify('confirmation', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time, this.calendarSmsUrl(id)));
+      this.syncCalendarCreate(id, updated);
+    }
+    const cancelled =
+      existing.status === AppointmentStatus.SCHEDULED && updated.status === AppointmentStatus.CANCELLED;
+    if (cancelled) {
+      this.syncCalendarDelete(id, existing.googleCalendarEventId);
     }
     return updated;
   }
@@ -237,7 +292,8 @@ export class AppointmentsManager {
     this.logger.log(
       `[Appointment] rescheduled appt=${id} phone=${maskPhone(updated.phone)} → ${updated.date} ${updated.time} status=${updated.status}`,
     );
-    this.notify('reschedule', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
+    this.notify('reschedule', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time, this.calendarSmsUrl(id)));
+    this.syncCalendarUpdate(id, appt.googleCalendarEventId, updated);
     return updated;
   }
 

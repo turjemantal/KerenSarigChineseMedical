@@ -63,6 +63,10 @@ export const envSchema = Joi.object({
   TWILIO_API_KEY_SECRET: requiredForSms,
   TWILIO_FROM_NUMBER:    requiredForSms,
 
+  // Google Calendar sync (optional — calendar sync is silently disabled when absent)
+  GOOGLE_CALENDAR_CREDENTIALS: optionalStr,
+  GOOGLE_CALENDAR_ID:          optionalStr,
+
   WHATSAPP_API_VERSION:                    optionalStr,
   WHATSAPP_ACCESS_TOKEN:                   requiredForWhatsapp,
   WHATSAPP_PHONE_NUMBER_ID:                requiredForWhatsapp,

@@ -60,6 +60,15 @@ export const config = {
     },
   },
 
+  googleCalendar: {
+    get credentials(): string {
+      return process.env.GOOGLE_CALENDAR_CREDENTIALS ?? '';
+    },
+    get calendarId(): string {
+      return process.env.GOOGLE_CALENDAR_ID ?? '';
+    },
+  },
+
   whatsapp: {
     get accessToken(): string {
       return process.env.WHATSAPP_ACCESS_TOKEN!;

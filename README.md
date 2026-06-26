@@ -37,6 +37,8 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
 - **Automated reminders** — an hourly cron (clinic time, Asia/Jerusalem) sends reminders for the *next day's* confirmed appointments at the admin-configured hour (default 09:00); a failed send is left unmarked, and the admin can re-send a reminder for any appointment from its detail drawer
 - **Health check** — public `GET /api/health` reports app + DB status (the sanctioned read-only way to verify production)
+- **Google Calendar sync** — when configured (service account), appointments are automatically created/updated/deleted in Keren's Google Calendar on approve, reschedule, and cancel; existing appointments backfilled via `npm run migrate` (v3 migration); clients get an "Add to Google Calendar" link after booking and in the portal
+- **OTP autofill** — SMS one-time codes autofill on iOS Safari (`autocomplete="one-time-code"`), Chrome Android and Samsung Internet (Web OTP API + SMS origin-binding footer)
 - **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection)
 - **Structured logging** — pino JSON logs shipped to Better Stack via a Vector sidecar; masked PII, request IDs, Docker log rotation; one structured line per request with string `level` ("info"/"error") and `fn`/method/url/status
 - **Legal pages** — accessibility statement (`/accessibility`) and privacy policy (`/privacy`) per Israeli law (תקנה 35; חוק הגנת הפרטיות incl. Amendment 13)
@@ -58,7 +60,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (240 tests) |
+| **Testing** | Jest + ts-jest (261 tests) |
 
 ---
 

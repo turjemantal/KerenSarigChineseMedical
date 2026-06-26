@@ -40,6 +40,7 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "@googleapis/calendar": "^15.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/jwt": "^11.0.2",

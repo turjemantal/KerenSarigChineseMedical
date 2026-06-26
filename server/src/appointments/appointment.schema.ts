@@ -39,6 +39,9 @@ export class Appointment {
 
   @Prop({ default: false })
   reminderSent: boolean;
+
+  @Prop()
+  googleCalendarEventId: string;
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);

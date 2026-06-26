@@ -7,6 +7,7 @@ import { WeeklyScheduleManager } from '../src/weekly-schedule/weekly-schedule.ma
 import { ClinicSettingsManager } from '../src/clinic-settings/clinic-settings.manager';
 import { ClientsManager } from '../src/clients/clients.manager';
 import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
+import { GoogleCalendarService } from '../src/integrations/google-calendar/google-calendar.service';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
 import { clinicToday, clinicHourNow, addDays } from '../src/common/utils/date.utils';
@@ -31,6 +32,7 @@ const mockService = {
   markReminderSent: jest.fn(),
   autoCompleteScheduledBefore: jest.fn(),
   update: jest.fn(),
+  setCalendarEventId: jest.fn().mockResolvedValue(undefined),
   delete: jest.fn(),
 };
 
@@ -40,6 +42,12 @@ const mockMessaging = {
   sendBookingRejected: jest.fn().mockResolvedValue(true),
   sendAppointmentReminder: jest.fn().mockResolvedValue(true),
   sendNewBookingAlert: jest.fn().mockResolvedValue(true),
+};
+
+const mockCalendar = {
+  createEvent: jest.fn().mockResolvedValue('evt-123'),
+  updateEvent: jest.fn().mockResolvedValue(undefined),
+  deleteEvent: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockScheduleBlocks = {
@@ -86,6 +94,7 @@ describe('AppointmentsManager', () => {
         { provide: ClinicSettingsManager, useValue: mockClinicSettings },
         { provide: ClientsManager, useValue: mockClients },
         { provide: MESSAGING_PROVIDER, useValue: mockMessaging },
+        { provide: GoogleCalendarService, useValue: mockCalendar },
       ],
     }).compile();
     manager = module.get<AppointmentsManager>(AppointmentsManager);
@@ -197,7 +206,7 @@ describe('AppointmentsManager', () => {
       mockService.create.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
       await manager.bookForClient(adminDto);
       await flushVoidPromises();
-      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time, undefined);
       expect(mockMessaging.sendNewBookingAlert).not.toHaveBeenCalled();
       delete process.env.ADMIN_PHONE;
     });
@@ -381,7 +390,7 @@ describe('AppointmentsManager', () => {
       const result = await manager.approve('a1');
       expect(result.status).toBe(AppointmentStatus.SCHEDULED);
       await flushVoidPromises();
-      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time, undefined);
     });
   });
 
@@ -559,6 +568,80 @@ describe('AppointmentsManager', () => {
       mockService.delete.mockResolvedValueOnce(undefined);
       await manager.remove('a1');
       expect(mockService.delete).toHaveBeenCalledWith('a1');
+    });
+  });
+
+  describe('Google Calendar sync', () => {
+    it('creates a calendar event when approve() transitions PENDING → SCHEDULED', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1);
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      mockService.update.mockResolvedValueOnce(scheduled);
+      await manager.approve('a1');
+      await flushVoidPromises();
+      expect(mockCalendar.createEvent).toHaveBeenCalledWith(scheduled);
+      expect(mockService.setCalendarEventId).toHaveBeenCalledWith('a1', 'evt-123');
+    });
+
+    it('creates a calendar event when bookForClient() creates a directly-scheduled appointment', async () => {
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      const scheduledAppt = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      mockService.create.mockResolvedValueOnce(scheduledAppt);
+      await manager.bookForClient({ name: 'Alice', phone: '0501111111', date: FUTURE_DATE, time: FUTURE_TIME });
+      await flushVoidPromises();
+      expect(mockCalendar.createEvent).toHaveBeenCalledWith(scheduledAppt);
+      expect(mockService.setCalendarEventId).toHaveBeenCalledWith('a1', 'evt-123');
+    });
+
+    it('deletes the calendar event when a SCHEDULED appointment is cancelled', async () => {
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED, googleCalendarEventId: 'evt-to-delete' };
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      const cancelled = { ...scheduled, status: AppointmentStatus.CANCELLED };
+      mockService.update.mockResolvedValueOnce(cancelled);
+      await manager.update('a1', { status: AppointmentStatus.CANCELLED });
+      await flushVoidPromises();
+      expect(mockCalendar.deleteEvent).toHaveBeenCalledWith('evt-to-delete');
+      expect(mockCalendar.createEvent).not.toHaveBeenCalled();
+    });
+
+    it('updates the calendar event when rescheduleOwn() moves a SCHEDULED appointment', async () => {
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED, googleCalendarEventId: 'evt-upd' };
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      const rescheduled = { ...scheduled, time: '21:00' };
+      mockService.update.mockResolvedValueOnce(rescheduled);
+      await manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00');
+      await flushVoidPromises();
+      expect(mockCalendar.updateEvent).toHaveBeenCalledWith('evt-upd', rescheduled);
+    });
+
+    it('creates a new event (not updates) when rescheduleByAdmin() promotes a PENDING appointment', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      const promoted = { ...pending, time: '21:00', status: AppointmentStatus.SCHEDULED };
+      mockService.update.mockResolvedValueOnce(promoted);
+      await manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00');
+      await flushVoidPromises();
+      expect(mockCalendar.updateEvent).not.toHaveBeenCalled();
+      expect(mockCalendar.createEvent).toHaveBeenCalledWith(promoted);
+    });
+
+    it('does not delete the calendar event when cancelling a PENDING appointment (no event existed)', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      const cancelled = { ...pending, status: AppointmentStatus.CANCELLED };
+      mockService.update.mockResolvedValueOnce(cancelled);
+      await manager.update('a1', { status: AppointmentStatus.CANCELLED });
+      await flushVoidPromises();
+      expect(mockCalendar.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('does not surface calendar errors to the caller (calendar sync is non-critical)', async () => {
+      mockCalendar.createEvent.mockRejectedValueOnce(new Error('calendar down'));
+      mockService.findById.mockResolvedValueOnce(appt1);
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      mockService.update.mockResolvedValueOnce(scheduled);
+      await expect(manager.approve('a1')).resolves.not.toThrow();
     });
   });
 });

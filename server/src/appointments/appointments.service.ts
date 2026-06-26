@@ -56,6 +56,10 @@ export class AppointmentsService {
     return appt;
   }
 
+  setCalendarEventId(id: string, eventId: string): Promise<AppointmentDocument | null> {
+    return this.dao.setCalendarEventId(id, eventId);
+  }
+
   async delete(id: string): Promise<void> {
     if (!isValidObjectId(id)) throw new NotFoundException(notFoundMessage(Entity.Appointment, id));
     const appt = await this.dao.delete(id);

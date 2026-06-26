@@ -1,0 +1,10 @@
+// Design-system barrel — used by /design-sync only, not imported by the app.
+export { Enso, Chop, Button, Placeholder, Avatar, Label, FormField } from './src/components/shared'
+export { Icon } from './src/components/icons'
+export { default as BookingModal } from './src/components/BookingModal'
+export { default as ClientPortal } from './src/components/ClientPortal'
+export { default as Dashboard } from './src/components/Dashboard'
+export { default as AdminLogin } from './src/components/AdminLogin'
+export { default as ReschedulePicker } from './src/components/ReschedulePicker'
+export { default as ContactModal } from './src/components/ContactModal'
+export { default as Landing } from './src/components/Landing'

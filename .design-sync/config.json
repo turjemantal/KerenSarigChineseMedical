@@ -1,0 +1,33 @@
+{
+  "projectId": "c3482732-b417-4506-99f5-df2e73806c2a",
+  "shape": "package",
+  "pkg": "keren-sarig-ui",
+  "globalName": "KerenSarigUI",
+  "srcDir": "src/components",
+  "tsconfig": "tsconfig.app.json",
+  "buildCmd": "cd client && npm run build",
+  "cssEntry": "dist/assets/index-CYbOO3P-.css",
+  "runtimeFontPrefixes": ["Frank Ruhl Libre", "Heebo", "JetBrains Mono", "Noto Serif SC"],
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "BookingModal":  {"cardMode": "single", "primaryStory": "Open"},
+    "ContactModal":  {"cardMode": "single", "primaryStory": "Open"}
+  },
+  "componentSrcMap": {
+    "Button":          "src/components/shared.tsx",
+    "Enso":            "src/components/shared.tsx",
+    "Chop":            "src/components/shared.tsx",
+    "Placeholder":     "src/components/shared.tsx",
+    "Avatar":          "src/components/shared.tsx",
+    "Label":           "src/components/shared.tsx",
+    "FormField":       "src/components/shared.tsx",
+    "Icon":            "src/components/icons.tsx",
+    "BookingModal":    "src/components/BookingModal.tsx",
+    "ClientPortal":    "src/components/ClientPortal.tsx",
+    "Dashboard":       "src/components/Dashboard.tsx",
+    "AdminLogin":      "src/components/AdminLogin.tsx",
+    "ReschedulePicker": "src/components/ReschedulePicker.tsx",
+    "ContactModal":    "src/components/ContactModal.tsx",
+    "Landing":         "src/components/Landing.tsx"
+  }
+}

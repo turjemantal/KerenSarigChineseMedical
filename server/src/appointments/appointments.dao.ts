@@ -62,6 +62,10 @@ export class AppointmentsDao {
     return result.modifiedCount;
   }
 
+  setCalendarEventId(id: string, eventId: string): Promise<AppointmentDocument | null> {
+    return this.model.findByIdAndUpdate(id, { googleCalendarEventId: eventId }, { new: true }).exec();
+  }
+
   delete(id: string): Promise<AppointmentDocument | null> {
     return this.model.findByIdAndDelete(id).exec();
   }

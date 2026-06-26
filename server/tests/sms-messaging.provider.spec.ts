@@ -34,6 +34,31 @@ describe('SmsMessagingProvider', () => {
         expect.stringContaining('10'),
       );
     });
+
+    it('appends the Web OTP API origin-binding footer when CLIENT_URL is a real domain', async () => {
+      process.env.CLIENT_URL = 'https://kerensarig.co.il';
+      await provider.sendOtp('0501234567', '654321');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      const lines = text.split('\n').filter(Boolean);
+      expect(lines[lines.length - 1]).toMatch(/^@kerensarig\.co\.il #654321$/);
+      delete process.env.CLIENT_URL;
+    });
+
+    it('omits the footer for localhost so iOS domain-matching does not suppress the suggestion', async () => {
+      process.env.CLIENT_URL = 'http://localhost:5173';
+      await provider.sendOtp('0501234567', '654321');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(text).not.toContain('@localhost');
+      delete process.env.CLIENT_URL;
+    });
+
+    it('omits the footer for bare IP addresses', async () => {
+      process.env.CLIENT_URL = 'http://192.168.1.105';
+      await provider.sendOtp('0501234567', '654321');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(text).not.toContain('@192.168');
+      delete process.env.CLIENT_URL;
+    });
   });
 
   describe('sendBookingConfirmation', () => {

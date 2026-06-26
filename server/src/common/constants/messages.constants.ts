@@ -20,11 +20,22 @@ export const bookingRejectedParams = bookingParams;
 export const reminderParams = (time: string): string[] => [time];
 
 // ─── SMS plain-text message builders ─────────────────────────────────────────
-export const smsOtpText = (code: string): string =>
-  `קוד האימות שלך הוא: ${code}. הקוד תקף ל-${OTP_EXPIRY_MINUTES} דקות.`;
+// The `\n\n@domain #code` footer enables Web OTP API autofill (Chrome Android,
+// Samsung Internet) and iOS Safari's domain-matched OTP suggestion.
+// Only appended for real domains — localhost and bare IPs trigger iOS's
+// domain-matching mode and suppress the suggestion when the origin doesn't match.
+export const isRealDomain = (domain: string): boolean =>
+  domain !== 'localhost' && !/^\d{1,3}(\.\d{1,3}){3}$/.test(domain);
 
-export const smsBookingText = (name: string, date: string, time: string): string =>
-  `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} אושר. ${CLINIC_NAME}`;
+export const smsOtpText = (code: string, domain: string): string => {
+  const base = `קוד האימות שלך הוא: ${code}. הקוד תקף ל-${OTP_EXPIRY_MINUTES} דקות.`;
+  return isRealDomain(domain) ? `${base}\n\n@${domain} #${code}` : base;
+};
+
+export const smsBookingText = (name: string, date: string, time: string, calendarUrl?: string): string => {
+  const base = `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} אושר. ${CLINIC_NAME}`;
+  return calendarUrl ? `${base}\nהוספה ליומן: ${calendarUrl}` : base;
+};
 
 export const smsBookingRequestText = (name: string, date: string, time: string): string =>
   `שלום ${name.split(' ')[0]}, בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time} התקבלה וממתינה לאישור. נעדכן ברגע שהתור יאושר. ${CLINIC_NAME}`;

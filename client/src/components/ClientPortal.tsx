@@ -4,6 +4,7 @@ import { Icon } from './icons'
 import { getClient, clearAuth, saveAuth, hasValidClientToken, clientSessionExpired, clientFetch, CLIENT_UNAUTHORIZED_EVENT } from '../auth'
 import type { ClientProfile } from '../auth'
 import { AppointmentStatus, APPOINTMENT_STATUS_LABELS, APPOINTMENT_DURATION_MINUTES, FREE_CANCELLATION_HOURS, MS_PER_HOUR, PHONE_REGEX, UI_ERRORS } from '../constants'
+import { buildGoogleCalendarUrl } from '../utils/calendarLink'
 import BookingModal from './BookingModal'
 import ReschedulePicker from './ReschedulePicker'
 
@@ -84,6 +85,19 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Chrome Android / Samsung Internet: auto-read OTP from incoming SMS
+  // iOS Safari / Firefox use the autocomplete="one-time-code" attribute instead
+  useEffect(() => {
+    if (phase !== 'otp') return
+    if (!('OTPCredential' in window)) return
+    const controller = new AbortController()
+    ;(navigator.credentials as any)
+      .get({ otp: { transport: ['sms'] }, signal: controller.signal })
+      .then((credential: any) => setOtp(credential.code))
+      .catch(() => { /* dismissed, timed-out, or unsupported — silent no-op */ })
+    return () => controller.abort()
+  }, [phase])
 
   const normalize = (v: string) => v.replace(/\D/g, '')
 
@@ -175,6 +189,7 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
             <div className="mt-8 space-y-4">
               <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 className="field-input" placeholder="000000" autoFocus
+                inputMode="numeric" autoComplete="one-time-code"
                 style={{ direction: 'ltr', textAlign: 'center', fontSize: 28, letterSpacing: '0.4em' }}
                 onKeyDown={e => e.key === 'Enter' && verifyOtp()} />
               {error && <div className="text-[13px]" style={{ color: '#C4634A' }}>{error}</div>}
@@ -440,6 +455,18 @@ function AppointmentCard({ appt, onCancel, onReschedule, showCancel }: {
           </div>
           {appt.concern && (
             <div className="mt-2" style={{ fontSize: 13, color: '#2A3D34' }}>״{appt.concern}״</div>
+          )}
+          {appt.status === AppointmentStatus.Scheduled && (
+            <div className="mt-3">
+              <a
+                href={buildGoogleCalendarUrl(appt.date, appt.time)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 12.5, color: '#4A6B5C', textDecoration: 'underline' }}
+              >
+                הוסף ליומן Google
+              </a>
+            </div>
           )}
         </div>
       </div>

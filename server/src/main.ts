@@ -5,7 +5,8 @@ import { config as loadEnv } from 'dotenv';
 // docker-compose environment: section so this is a silent no-op.
 loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { RequestMethod } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -51,7 +52,9 @@ async function bootstrap() {
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({ origin: config.clientUrl });
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: [{ path: 'cal/:id', method: RequestMethod.GET }],
+  });
   await app.listen(config.port, '0.0.0.0');
 }
 void bootstrap();
