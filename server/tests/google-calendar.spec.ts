@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GoogleCalendarService } from '../src/integrations/google-calendar/google-calendar.service';
+import { AppointmentDocument } from '../src/appointments/appointment.schema';
 
 // mock @googleapis/calendar so no real HTTP calls are made.
 // The fns are defined inside the factory (jest.mock is hoisted above const declarations)
@@ -36,7 +37,7 @@ const makeAppt = (overrides = {}) => ({
   concern: 'כאב גב',
   notes: '',
   ...overrides,
-} as any);
+} as unknown as AppointmentDocument);
 
 describe('GoogleCalendarService', () => {
   let service: GoogleCalendarService;

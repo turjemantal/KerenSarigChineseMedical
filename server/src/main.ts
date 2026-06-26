@@ -5,7 +5,7 @@ import { config as loadEnv } from 'dotenv';
 // docker-compose environment: section so this is a silent no-op.
 loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
-import { NestFactory, Reflector } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { RequestMethod } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';

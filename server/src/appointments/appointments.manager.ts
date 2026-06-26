@@ -17,7 +17,6 @@ import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validatio
 import { config } from '../config';
 import { ADMIN_SOURCE, CLINIC_TIMEZONE } from '../common/constants/defaults.constants';
 import { buildGoogleCalendarUrl } from './calendar.utils';
-import { isRealDomain } from '../common/constants/messages.constants';
 import { AUTO_COMPLETE_HOUR, FREE_CANCELLATION_HOURS } from '../common/constants/schedule.constants';
 import { MS_PER_HOUR, MS_PER_DAY } from '../common/constants/time.constants';
 import { clinicToday, clinicTimeNow, clinicHourNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';

@@ -92,9 +92,9 @@ function PortalLogin({ onLogin, expired = false }: { onLogin: (client: ClientPro
     if (phase !== 'otp') return
     if (!('OTPCredential' in window)) return
     const controller = new AbortController()
-    ;(navigator.credentials as any)
+    ;(navigator.credentials as CredentialsContainer & { get(o: object): Promise<{ code: string }> })
       .get({ otp: { transport: ['sms'] }, signal: controller.signal })
-      .then((credential: any) => setOtp(credential.code))
+      .then((credential) => setOtp(credential.code))
       .catch(() => { /* dismissed, timed-out, or unsupported — silent no-op */ })
     return () => controller.abort()
   }, [phase])
