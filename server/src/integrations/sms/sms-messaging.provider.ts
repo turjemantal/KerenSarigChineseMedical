@@ -17,8 +17,8 @@ export class SmsMessagingProvider implements IMessagingProvider {
     return this.sms.sendSms(phone, smsBookingRequestText(name, date, time));
   }
 
-  sendBookingConfirmation(phone: string, name: string, date: string, time: string, calendarUrl?: string): Promise<boolean> {
-    return this.sms.sendSms(phone, smsBookingText(name, date, time, calendarUrl));
+  sendBookingConfirmation(phone: string, name: string, date: string, time: string): Promise<boolean> {
+    return this.sms.sendSms(phone, smsBookingText(name, date, time));
   }
 
   sendBookingRejected(phone: string, name: string, date: string, time: string): Promise<boolean> {

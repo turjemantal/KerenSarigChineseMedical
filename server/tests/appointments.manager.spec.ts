@@ -9,6 +9,7 @@ import { ClientsManager } from '../src/clients/clients.manager';
 import { MESSAGING_PROVIDER } from '../src/integrations/messaging/messaging.token';
 import { GoogleCalendarService } from '../src/integrations/google-calendar/google-calendar.service';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
+import { ERRORS } from '../src/common/constants/errors.constants';
 import { CreateAppointmentDto } from '../src/appointments/dto/create-appointment.dto';
 import { clinicToday, clinicHourNow, addDays } from '../src/common/utils/date.utils';
 
@@ -148,6 +149,16 @@ describe('AppointmentsManager', () => {
       expect(mockService.create).not.toHaveBeenCalled();
     });
 
+    // double-booking backstop: even if the availability check passes (a concurrent
+    // request took the slot in between), the unique-slot DB index rejects the create
+    // with a duplicate-key error, which must surface as a clean "slot not available".
+    it('translates a duplicate-slot DB error (code 11000) into "slot not available"', async () => {
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      mockService.create.mockRejectedValueOnce(Object.assign(new Error('E11000 duplicate key'), { code: 11000 }));
+      await expect(manager.book({ date: FUTURE_DATE, time: FUTURE_TIME }, { phone: '0501111111' }))
+        .rejects.toThrow(ERRORS.SLOT_NOT_AVAILABLE);
+    });
+
     it('rejects a slot that is blocked', async () => {
       mockAvailability({
         extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }],
@@ -206,7 +217,7 @@ describe('AppointmentsManager', () => {
       mockService.create.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
       await manager.bookForClient(adminDto);
       await flushVoidPromises();
-      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time, undefined);
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
       expect(mockMessaging.sendNewBookingAlert).not.toHaveBeenCalled();
       delete process.env.ADMIN_PHONE;
     });
@@ -371,6 +382,13 @@ describe('AppointmentsManager', () => {
       expect(mockService.update).not.toHaveBeenCalled();
     });
 
+    it('translates a duplicate-slot DB error on the move into "slot not available"', async () => {
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockRejectedValueOnce(Object.assign(new Error('E11000 duplicate key'), { code: 11000 }));
+      await expect(manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00')).rejects.toThrow(ERRORS.SLOT_NOT_AVAILABLE);
+    });
+
     it('auto-approves a still-pending request on admin reschedule (→ scheduled + confirmation)', async () => {
       const pending = { ...appt1, status: AppointmentStatus.PENDING };
       mockService.findById.mockResolvedValueOnce(pending);
@@ -390,7 +408,7 @@ describe('AppointmentsManager', () => {
       const result = await manager.approve('a1');
       expect(result.status).toBe(AppointmentStatus.SCHEDULED);
       await flushVoidPromises();
-      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time, undefined);
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
     });
   });
 
@@ -402,6 +420,35 @@ describe('AppointmentsManager', () => {
       await manager.update('a1', { status: AppointmentStatus.SCHEDULED });
       await flushVoidPromises();
       expect(mockMessaging.sendBookingConfirmation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('status transition state machine', () => {
+    // cancel / no-show are NOT valid for a pending request — Keren confirms or rejects it.
+    it('blocks marking a PENDING request as no-show (invalid transition)', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.PENDING });
+      await expect(manager.update('a1', { status: AppointmentStatus.NOSHOW })).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('markNoShow on a PENDING request is rejected', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.PENDING });
+      await expect(manager.markNoShow('a1')).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks reverting a SCHEDULED appointment back to PENDING', async () => {
+      mockService.findById.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.SCHEDULED });
+      await expect(manager.update('a1', { status: AppointmentStatus.PENDING })).rejects.toThrow(BadRequestException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('still allows a patient to withdraw (cancel) their own PENDING request', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValue(pending);
+      mockService.update.mockResolvedValueOnce({ ...pending, status: AppointmentStatus.CANCELLED });
+      await manager.cancelOwn('a1', appt1.phone);
+      expect(mockService.update).toHaveBeenCalledWith('a1', { status: AppointmentStatus.CANCELLED });
     });
   });
 

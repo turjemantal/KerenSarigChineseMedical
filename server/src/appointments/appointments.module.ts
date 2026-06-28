@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Appointment, AppointmentSchema } from './appointment.schema';
 import { AppointmentsController } from './appointments.controller';
-import { CalendarRedirectController } from './calendar-redirect.controller';
 import { AppointmentsManager } from './appointments.manager';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentsDao } from './appointments.dao';
@@ -21,7 +20,7 @@ import { GoogleCalendarModule } from '../integrations/google-calendar/google-cal
     ClientsModule,
     GoogleCalendarModule,
   ],
-  controllers: [AppointmentsController, CalendarRedirectController],
+  controllers: [AppointmentsController],
   providers: [AppointmentsManager, AppointmentsService, AppointmentsDao],
 })
 export class AppointmentsModule {}

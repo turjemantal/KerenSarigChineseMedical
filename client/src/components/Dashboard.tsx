@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Enso, Button, Avatar, Label } from './shared'
 import { Icon } from './icons'
 import { clearAdminToken, adminFetch } from '../auth'
@@ -6,7 +6,7 @@ import ReschedulePicker from './ReschedulePicker'
 import {
   AppointmentStatus,
   APPOINTMENT_STATUS_LABELS,
-  isActiveAppointment,
+  adminCan,
   LeadStatus,
   LEAD_STATUS_LABELS,
   APPOINTMENT_DURATION_MINUTES,
@@ -1136,68 +1136,83 @@ function BlocksDrawer({ blocks, extraSlots, onClose, onChange, onExtraChange }: 
 
 // ---------- AppointmentsView ----------
 function AppointmentsView({ appointments, clients, onStatusChange }: { appointments: Appointment[]; clients: RegisteredClient[]; onStatusChange: () => void }) {
-  const [selected, setSelected] = useState<Appointment | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [rescheduling, setRescheduling] = useState(false)
   const [filter, setFilter] = useState('all')
   const [reminder, setReminder] = useState<'idle' | 'sending' | 'failed'>('idle')
+  // ONE in-flight guard for every drawer action — stops a second action (e.g. cancel then
+  // reject) firing against the same appointment before the first response lands.
+  const [busy, setBusy] = useState(false)
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
+  // derive the open appointment from the live list, never a frozen snapshot, so the drawer
+  // always reflects the current status and shows only the buttons valid for that state.
+  const selected = appointments.find(a => a._id === selectedId) ?? null
   const filterTabs: [string, string][] = [
     ['all', 'הכל'],
     ...Object.values(AppointmentStatus).map(s => [s, APPOINTMENT_STATUS_LABELS[s]] as [string, string]),
   ]
 
-  const cancelAppointment = async (id: string) => {
-    const res = await adminFetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: AppointmentStatus.Cancelled }) })
-    if (!res.ok) return
-    onStatusChange()
-    setSelected(null)
+  const closeDrawer = () => { setSelectedId(null); setReminder('idle'); setRescheduling(false) }
+
+  // runs a mutating action behind the busy guard, then refreshes the data and closes the
+  // drawer. fn resolves true on success, false on failure (→ alert, drawer stays open).
+  const runAction = async (fn: () => Promise<boolean>, failMsg: string) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (!await fn()) { alert(failMsg); return }
+      onStatusChange()
+      closeDrawer()
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const markNoShow = async (id: string) => {
-    const res = await adminFetch(`/api/appointments/${id}/noshow`, { method: 'PATCH' })
-    if (!res.ok) return
-    onStatusChange()
-    setSelected(null)
-  }
-
-  const approve = async (id: string) => {
-    if (!await approveAppointment(id)) return
-    onStatusChange()
-    setSelected(null)
-  }
-
-  const reject = async (id: string) => {
-    const res = await adminFetch(`/api/appointments/${id}/reject`, { method: 'PATCH' })
-    if (!res.ok) return
-    onStatusChange()
-    setSelected(null)
-  }
+  const approve = (id: string) => runAction(() => approveAppointment(id), 'אישור התור נכשל. נסי שוב.')
+  const reject = (id: string) =>
+    runAction(async () => (await adminFetch(`/api/appointments/${id}/reject`, { method: 'PATCH' })).ok, 'דחיית הבקשה נכשלה. נסי שוב.')
+  const cancelAppointment = (id: string) =>
+    runAction(async () => (await adminFetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: AppointmentStatus.Cancelled }) })).ok, 'ביטול התור נכשל. נסי שוב.')
+  const markNoShow = (id: string) =>
+    runAction(async () => (await adminFetch(`/api/appointments/${id}/noshow`, { method: 'PATCH' })).ok, 'העדכון נכשל. נסי שוב.')
 
   const sendReminder = async (id: string) => {
+    if (busy) return
+    setBusy(true)
     setReminder('sending')
-    const res = await adminFetch(`/api/appointments/${id}/remind`, { method: 'POST' })
-    if (res.ok) { onStatusChange(); setReminder('idle'); setSelected(null) }
-    else setReminder('failed')
+    try {
+      const res = await adminFetch(`/api/appointments/${id}/remind`, { method: 'POST' })
+      if (res.ok) { onStatusChange(); closeDrawer() }
+      else setReminder('failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   // admin reschedule — reuses the shared ReschedulePicker (same availability source the
   // client uses) and the admin reschedule route (no ownership/free-window limit, but the
   // server still re-checks the slot is genuinely free).
   const rescheduleAppointment = async (id: string, date: string, time: string): Promise<{ ok: boolean; error?: string }> => {
-    const res = await adminFetch(`/api/appointments/${id}/reschedule/admin`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, time }),
-    })
-    if (res.ok) { onStatusChange(); setRescheduling(false); setSelected(null); return { ok: true } }
-    let error: string = UI_ERRORS.GENERIC
+    if (busy) return { ok: false }
+    setBusy(true)
     try {
-      const body = await res.json()
-      const msg = Array.isArray(body?.message) ? body.message[0] : body?.message
-      if (typeof msg === 'string') error = msg
-    } catch { /* keep generic */ }
-    return { ok: false, error }
+      const res = await adminFetch(`/api/appointments/${id}/reschedule/admin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, time }),
+      })
+      if (res.ok) { onStatusChange(); closeDrawer(); return { ok: true } }
+      let error: string = UI_ERRORS.GENERIC
+      try {
+        const body = await res.json()
+        const msg = Array.isArray(body?.message) ? body.message[0] : body?.message
+        if (typeof msg === 'string') error = msg
+      } catch { /* keep generic */ }
+      return { ok: false, error }
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -1218,7 +1233,7 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
       {/* mobile cards */}
       <div className="md:hidden space-y-3">
         {filtered.map(a => (
-          <div key={a._id} onClick={() => setSelected(a)} className="p-4 cursor-pointer" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
+          <div key={a._id} onClick={() => setSelectedId(a._id)} className="p-4 cursor-pointer" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.1)', borderRadius: 2 }}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <Avatar name={a.name} size={32} />
@@ -1235,7 +1250,7 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
             </div>
             {a.status === AppointmentStatus.Pending && (
               <div className="mt-3">
-                <Button variant="primary" size="sm" onClick={() => void approve(a._id)} className="w-full">אישור התור</Button>
+                <Button variant="primary" size="sm" onClick={() => void approve(a._id)} disabled={busy} className="w-full">אישור התור</Button>
               </div>
             )}
           </div>
@@ -1256,7 +1271,7 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
             </thead>
             <tbody>
               {filtered.map((a, i) => (
-                <tr key={a._id} onClick={() => setSelected(a)} className="cursor-pointer hover:bg-[#F5F1EA] transition-colors"
+                <tr key={a._id} onClick={() => setSelectedId(a._id)} className="cursor-pointer hover:bg-[#F5F1EA] transition-colors"
                   style={{ borderBottom: i < filtered.length - 1 ? '1px solid rgba(28,42,36,0.06)' : 'none' }}>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
@@ -1270,8 +1285,8 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
                   <td className="px-5 py-4"><Badge tone={a.status}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge></td>
                   <td className="px-5 py-4">
                     {a.status === AppointmentStatus.Pending && (
-                      <button onClick={e => { e.stopPropagation(); void approve(a._id) }}
-                        className="text-[12px] px-3 h-8" style={{ background: '#4A6B5C', color: '#F5F1EA', borderRadius: 2 }}>
+                      <button onClick={e => { e.stopPropagation(); void approve(a._id) }} disabled={busy}
+                        className="text-[12px] px-3 h-8 disabled:opacity-50" style={{ background: '#4A6B5C', color: '#F5F1EA', borderRadius: 2 }}>
                         אישור
                       </button>
                     )}
@@ -1288,7 +1303,7 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
       </div>
 
       {selected && (
-        <Drawer onClose={() => { setSelected(null); setReminder('idle'); setRescheduling(false) }} title="פרטי תור">
+        <Drawer onClose={closeDrawer} title="פרטי תור">
           <div className="flex items-center gap-4 mb-6">
             <Avatar name={selected.name} size={54} />
             <div>
@@ -1304,37 +1319,41 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
             {selected.concern && <KV k="סיבת הפנייה" v={selected.concern} multi />}
             {selected.notes && <KV k="הערות" v={selected.notes} multi />}
           </div>
+          {/* Actions are driven entirely by adminCan(status) — the single source of truth.
+              A pending request shows only אישור/דחייה (+ שינוי מועד); ביטול תור and
+              "לא הגיע/ה" appear only once it's a confirmed (scheduled) appointment. */}
           <div className="mt-8 space-y-3">
-            {selected.status === AppointmentStatus.Pending && (
+            {adminCan(selected.status, 'approve') && (
               <div className="grid grid-cols-2 gap-3">
-                <Button variant="primary" onClick={() => void approve(selected._id)}>אישור התור</Button>
-                <Button variant="quiet" onClick={() => void reject(selected._id)}>דחיית הבקשה</Button>
+                <Button variant="primary" onClick={() => void approve(selected._id)} disabled={busy}>אישור התור</Button>
+                <Button variant="quiet" onClick={() => void reject(selected._id)} disabled={busy}>דחיית הבקשה</Button>
               </div>
             )}
-            {selected.status === AppointmentStatus.Scheduled && (
-              <Button variant="moss" size="sm" onClick={() => void sendReminder(selected._id)} disabled={reminder === 'sending'} className="w-full">
+            {adminCan(selected.status, 'remind') && (
+              <Button variant="moss" size="sm" onClick={() => void sendReminder(selected._id)} disabled={busy} className="w-full">
                 {reminder === 'sending' ? 'שולח תזכורת…' : 'שליחת תזכורת'}
               </Button>
             )}
             {reminder === 'failed' && (
               <div style={{ fontSize: 12.5, color: '#C4634A' }}>שליחת התזכורת נכשלה. נסו שוב.</div>
             )}
-            {(selected.status === AppointmentStatus.Scheduled || selected.status === AppointmentStatus.Pending) && (
+            {adminCan(selected.status, 'reschedule') && (
               rescheduling ? (
                 <ReschedulePicker
                   onSubmit={(date, time) => rescheduleAppointment(selected._id, date, time)}
                   onClose={() => setRescheduling(false)}
                 />
               ) : (
-                <Button variant="moss" size="sm" onClick={() => setRescheduling(true)} className="w-full">שינוי מועד</Button>
+                <Button variant="moss" size="sm" onClick={() => setRescheduling(true)} disabled={busy} className="w-full">שינוי מועד</Button>
               )
             )}
-            {/* terminal appointments (completed/cancelled/rejected/no-show) are final — no actions */}
-            {isActiveAppointment(selected.status) && (
-              <div className={`grid gap-3 ${selected.status === AppointmentStatus.Scheduled ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                <Button variant="ghost" onClick={() => void cancelAppointment(selected._id)}>ביטול תור</Button>
-                {selected.status === AppointmentStatus.Scheduled && (
-                  <Button variant="quiet" onClick={() => void markNoShow(selected._id)}>לא הגיע/ה</Button>
+            {(adminCan(selected.status, 'cancel') || adminCan(selected.status, 'noshow')) && (
+              <div className={`grid gap-3 ${adminCan(selected.status, 'noshow') ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {adminCan(selected.status, 'cancel') && (
+                  <Button variant="ghost" onClick={() => void cancelAppointment(selected._id)} disabled={busy}>ביטול תור</Button>
+                )}
+                {adminCan(selected.status, 'noshow') && (
+                  <Button variant="quiet" onClick={() => void markNoShow(selected._id)} disabled={busy}>לא הגיע/ה</Button>
                 )}
               </div>
             )}
@@ -1859,6 +1878,29 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
   const { extraSlots, refresh: refreshExtraSlots } = useExtraSlots()
   const { schedule, refresh: refreshSchedule } = useWeeklySchedule()
   const { clients, refresh: refreshClients } = useClients()
+
+  // Keep the dashboard current without a manual page refresh. The hooks fetch once on
+  // mount; on top of that we re-sync all data (a) when the admin switches menu section and
+  // (b) when the tab/window regains focus (e.g. coming back from the phone lock screen),
+  // so every view always shows the latest state. Refs hold the latest refreshers so the
+  // listener stays stable and we never wire stale closures into the effects.
+  const refreshAll = () => {
+    refreshLeads(); refreshAppts(); refreshClients(); refreshBlocks(); refreshExtraSlots(); refreshSchedule()
+  }
+  const refreshAllRef = useRef(refreshAll)
+  refreshAllRef.current = refreshAll
+
+  const firstRender = useRef(true)
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return } // mount already fetched
+    refreshAllRef.current()
+  }, [view])
+
+  useEffect(() => {
+    const onFocus = () => refreshAllRef.current()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   return (
     <div className="flex min-h-screen" style={{ background: '#F5F1EA', color: '#1C2A24' }}>

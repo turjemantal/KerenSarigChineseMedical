@@ -4,7 +4,7 @@
 export interface IMessagingProvider {
   sendOtp(phone: string, code: string): Promise<boolean>;
   sendBookingRequestReceived(phone: string, name: string, date: string, time: string): Promise<boolean>;
-  sendBookingConfirmation(phone: string, name: string, date: string, time: string, calendarUrl?: string): Promise<boolean>;
+  sendBookingConfirmation(phone: string, name: string, date: string, time: string): Promise<boolean>;
   sendBookingRejected(phone: string, name: string, date: string, time: string): Promise<boolean>;
   sendAppointmentReminder(phone: string, time: string): Promise<boolean>;
   sendNewBookingAlert(phone: string, name: string, date: string, time: string): Promise<boolean>;

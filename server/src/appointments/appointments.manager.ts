@@ -11,12 +11,11 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { MESSAGING_PROVIDER } from '../integrations/messaging/messaging.token';
 import { IMessagingProvider } from '../integrations/messaging/messaging-provider.interface';
 import { GoogleCalendarService } from '../integrations/google-calendar/google-calendar.service';
-import { AppointmentStatus, isTerminalAppointmentStatus } from '../common/enums/appointment-status.enum';
+import { AppointmentStatus, isTerminalAppointmentStatus, canTransitionStatus } from '../common/enums/appointment-status.enum';
 import { ERRORS } from '../common/constants/errors.constants';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { config } from '../config';
 import { ADMIN_SOURCE, CLINIC_TIMEZONE } from '../common/constants/defaults.constants';
-import { buildGoogleCalendarUrl } from './calendar.utils';
 import { AUTO_COMPLETE_HOUR, FREE_CANCELLATION_HOURS } from '../common/constants/schedule.constants';
 import { MS_PER_HOUR, MS_PER_DAY } from '../common/constants/time.constants';
 import { clinicToday, clinicTimeNow, clinicHourNow, eachDateInRange, addDays, weekdayOf } from '../common/utils/date.utils';
@@ -54,7 +53,7 @@ export class AppointmentsManager {
     if (!available.includes(dto.time)) {
       throw new BadRequestException(ERRORS.SLOT_NOT_AVAILABLE);
     }
-    const appt = await this.service.create({ ...dto, phone, name });
+    const appt = await this.guardSlotConflict(this.service.create({ ...dto, phone, name }));
     const id = String(appt._id);
     this.logger.log(
       `[Appointment] booked appt=${id} phone=${maskPhone(appt.phone)} ${appt.date} ${appt.time} status=${appt.status}`,
@@ -80,20 +79,36 @@ export class AppointmentsManager {
     }
 
     await this.clients.findOrCreate(phone, dto.name);
-    const appt = await this.service.create({
+    const appt = await this.guardSlotConflict(this.service.create({
       ...dto,
       phone,
       name,
       status: AppointmentStatus.SCHEDULED,
       source: ADMIN_SOURCE,
-    });
+    }));
     const id = String(appt._id);
     this.logger.log(
       `[Appointment] admin-booked appt=${id} phone=${maskPhone(appt.phone)} ${appt.date} ${appt.time} status=${appt.status}`,
     );
-    this.notify('confirmation', id, this.messaging.sendBookingConfirmation(appt.phone, appt.name, appt.date, appt.time, this.calendarSmsUrl(id)));
+    this.notify('confirmation', id, this.messaging.sendBookingConfirmation(appt.phone, appt.name, appt.date, appt.time));
     this.syncCalendarCreate(id, appt);
     return appt;
+  }
+
+  // Backstop for the unique-slot index: the availability check above closes the common
+  // case, but two near-simultaneous requests for the same slot can both pass it. The DB
+  // index then rejects the loser with a duplicate-key error (code 11000), which we
+  // surface as a clean "slot not available" instead of a 500. This is what makes
+  // double-booking actually impossible, not just unlikely.
+  private async guardSlotConflict<T>(p: Promise<T>): Promise<T> {
+    try {
+      return await p;
+    } catch (e) {
+      if (typeof e === 'object' && e !== null && (e as { code?: number }).code === 11000) {
+        throw new BadRequestException(ERRORS.SLOT_NOT_AVAILABLE);
+      }
+      throw e;
+    }
   }
 
   // fire-and-forget messaging, but log the real outcome tied to the appointment id
@@ -192,31 +207,20 @@ export class AppointmentsManager {
     return this.service.findById(id);
   }
 
-  // Used by CalendarRedirectController — returns the Google Calendar URL for a
-  // SCHEDULED appointment, or null if not found / not in a shareable state.
-  async getCalendarUrl(id: string): Promise<string | null> {
-    const appt = await this.service.findById(id).catch(() => null);
-    if (!appt || appt.status !== AppointmentStatus.SCHEDULED) return null;
-    return buildGoogleCalendarUrl(appt.date, appt.time);
-  }
-
-  // Builds the short calendar redirect URL included in confirmation SMS messages.
-  // Returns undefined for localhost / bare IPs where the link wouldn't be reachable.
-  private calendarSmsUrl(id: string): string | undefined {
-    const domain = new URL(config.clientUrl).hostname;
-    // Calendar links work fine on local IPs (same-network redirect); only skip for
-    // localhost where the URL is unreachable from the patient's device.
-    return domain !== 'localhost' ? `${config.clientUrl}/cal/${id}` : undefined;
-  }
-
   async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
     const existing = await this.service.findById(id);
-    // server-authoritative: a terminal appointment (completed/cancelled/rejected/no-show)
-    // is final — block any status transition out of it (cancel, no-show, approve, …).
-    if (dto.status && dto.status !== existing.status && isTerminalAppointmentStatus(existing.status)) {
-      throw new BadRequestException(ERRORS.CANNOT_CHANGE_TERMINAL_STATUS);
+    // server-authoritative state machine: only legal status transitions are allowed
+    // (e.g. a terminal appointment is final; a pending request can't be marked no-show).
+    // The dashboard mirrors this in which buttons it shows, but the server is the gate.
+    if (dto.status && dto.status !== existing.status) {
+      if (isTerminalAppointmentStatus(existing.status)) {
+        throw new BadRequestException(ERRORS.CANNOT_CHANGE_TERMINAL_STATUS);
+      }
+      if (!canTransitionStatus(existing.status, dto.status)) {
+        throw new BadRequestException(ERRORS.INVALID_STATUS_TRANSITION);
+      }
     }
-    const updated = await this.service.update(id, dto);
+    const updated = await this.guardSlotConflict(this.service.update(id, dto));
     if (dto.status && dto.status !== existing.status) {
       this.logger.log(`[Appointment] status appt=${id} ${existing.status} → ${updated.status}`);
     }
@@ -224,7 +228,7 @@ export class AppointmentsManager {
       existing.status === AppointmentStatus.PENDING && updated.status === AppointmentStatus.SCHEDULED;
     if (approved) {
       this.logger.log(`[Appointment] approved appt=${id} phone=${maskPhone(updated.phone)}`);
-      this.notify('confirmation', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time, this.calendarSmsUrl(id)));
+      this.notify('confirmation', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
       this.syncCalendarCreate(id, updated);
     }
     const cancelled =
@@ -284,14 +288,16 @@ export class AppointmentsManager {
       throw new BadRequestException(ERRORS.SLOT_NOT_AVAILABLE);
     }
     const promote = opts.approveIfPending && appt.status === AppointmentStatus.PENDING;
-    const updated = await this.service.update(id, { date: newDate, time: newTime, ...(promote && { status: AppointmentStatus.SCHEDULED }) });
+    const updated = await this.guardSlotConflict(
+      this.service.update(id, { date: newDate, time: newTime, ...(promote && { status: AppointmentStatus.SCHEDULED }) }),
+    );
     if (promote) {
       this.logger.log(`[Appointment] approved-on-reschedule appt=${id} phone=${maskPhone(updated.phone)}`);
     }
     this.logger.log(
       `[Appointment] rescheduled appt=${id} phone=${maskPhone(updated.phone)} → ${updated.date} ${updated.time} status=${updated.status}`,
     );
-    this.notify('reschedule', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time, this.calendarSmsUrl(id)));
+    this.notify('reschedule', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
     this.syncCalendarUpdate(id, appt.googleCalendarEventId, updated);
     return updated;
   }

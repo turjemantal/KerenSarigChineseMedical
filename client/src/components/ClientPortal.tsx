@@ -4,9 +4,9 @@ import { Icon } from './icons'
 import { getClient, clearAuth, saveAuth, hasValidClientToken, clientSessionExpired, clientFetch, CLIENT_UNAUTHORIZED_EVENT } from '../auth'
 import type { ClientProfile } from '../auth'
 import { AppointmentStatus, APPOINTMENT_STATUS_LABELS, APPOINTMENT_DURATION_MINUTES, FREE_CANCELLATION_HOURS, MS_PER_HOUR, PHONE_REGEX, UI_ERRORS } from '../constants'
-import { buildGoogleCalendarUrl } from '../utils/calendarLink'
 import BookingModal from './BookingModal'
 import ReschedulePicker from './ReschedulePicker'
+import { AddToCalendarButton } from './AddToCalendarButton'
 
 interface Appointment {
   _id: string
@@ -456,16 +456,10 @@ function AppointmentCard({ appt, onCancel, onReschedule, showCancel }: {
           {appt.concern && (
             <div className="mt-2" style={{ fontSize: 13, color: '#2A3D34' }}>״{appt.concern}״</div>
           )}
-          {appt.status === AppointmentStatus.Scheduled && (
+          {isUpcoming(appt.date, appt.time) &&
+            (appt.status === AppointmentStatus.Pending || appt.status === AppointmentStatus.Scheduled) && (
             <div className="mt-3">
-              <a
-                href={buildGoogleCalendarUrl(appt.date, appt.time)}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: 12.5, color: '#4A6B5C', textDecoration: 'underline' }}
-              >
-                הוסף ליומן Google
-              </a>
+              <AddToCalendarButton date={appt.date} time={appt.time} />
             </div>
           )}
         </div>

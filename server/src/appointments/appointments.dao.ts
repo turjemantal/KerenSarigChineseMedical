@@ -4,7 +4,7 @@ import { Model } from 'mongoose';
 import { Appointment, AppointmentDocument } from './appointment.schema';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { AppointmentStatus } from '../common/enums/appointment-status.enum';
+import { AppointmentStatus, ACTIVE_APPOINTMENT_STATUSES } from '../common/enums/appointment-status.enum';
 
 @Injectable()
 export class AppointmentsDao {
@@ -18,13 +18,16 @@ export class AppointmentsDao {
     return this.model.find().sort({ date: 1, time: 1 }).exec();
   }
 
+  // Only ACTIVE (pending/scheduled) appointments occupy a slot — cancelled, rejected,
+  // completed and no-show all free it. These two feed the availability calculation, so
+  // they must mirror the unique-slot index's partial filter exactly.
   findByDate(date: string): Promise<AppointmentDocument[]> {
-    return this.model.find({ date, status: { $ne: AppointmentStatus.CANCELLED } }).exec();
+    return this.model.find({ date, status: { $in: ACTIVE_APPOINTMENT_STATUSES } }).exec();
   }
 
   findBetween(from: string, to: string): Promise<AppointmentDocument[]> {
     return this.model
-      .find({ date: { $gte: from, $lte: to }, status: { $ne: AppointmentStatus.CANCELLED } })
+      .find({ date: { $gte: from, $lte: to }, status: { $in: ACTIVE_APPOINTMENT_STATUSES } })
       .exec();
   }
 

@@ -6,7 +6,6 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
 
 import { NestFactory } from '@nestjs/core';
-import { RequestMethod } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -52,9 +51,7 @@ async function bootstrap() {
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({ origin: config.clientUrl });
-  app.setGlobalPrefix('api', {
-    exclude: [{ path: 'cal/:id', method: RequestMethod.GET }],
-  });
+  app.setGlobalPrefix('api');
   await app.listen(config.port, '0.0.0.0');
 }
 void bootstrap();

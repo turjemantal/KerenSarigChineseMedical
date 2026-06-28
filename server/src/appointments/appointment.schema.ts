@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
-import { AppointmentStatus } from '../common/enums/appointment-status.enum';
+import { AppointmentStatus, ACTIVE_APPOINTMENT_STATUSES } from '../common/enums/appointment-status.enum';
 import { DEFAULT_SOURCE, DEFAULT_APPOINTMENT_TREATMENT } from '../common/constants/defaults.constants';
 
 export type AppointmentDocument = HydratedDocument<Appointment>;
@@ -31,7 +31,7 @@ export class Appointment {
   @Prop()
   notes: string;
 
-  @Prop({ enum: Object.values(AppointmentStatus), default: AppointmentStatus.PENDING })
+  @Prop({ type: String, enum: Object.values(AppointmentStatus), default: AppointmentStatus.PENDING })
   status: AppointmentStatus;
 
   @Prop({ default: DEFAULT_SOURCE })
@@ -45,3 +45,19 @@ export class Appointment {
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
+
+// Hard guarantee against double-booking: at most one ACTIVE (pending/scheduled)
+// appointment may exist per date+time slot. Enforced atomically by Mongo, so even two
+// simultaneous booking requests for the same slot can't both succeed (the loser hits a
+// duplicate-key error, which the manager translates to "slot not available"). The
+// partial filter scopes uniqueness to active appointments only, so a cancelled/rejected
+// slot is freed and can be re-booked. (Also created/repaired by migration v4 for
+// existing databases — see migrations/v4.)
+AppointmentSchema.index(
+  { date: 1, time: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ACTIVE_APPOINTMENT_STATUSES } },
+    name: 'uniq_active_slot',
+  },
+);

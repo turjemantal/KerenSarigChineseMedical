@@ -4,6 +4,7 @@ import { Icon } from './icons'
 import { getClient, getToken, saveAuth, authHeader, clientFetch } from '../auth'
 import type { ClientProfile } from '../auth'
 import { APPOINTMENT_DURATION_MINUTES, PHONE_REGEX, UI_ERRORS, CLINIC_CONTACT, parseAvailability } from '../constants'
+import { AddToCalendarButton } from './AddToCalendarButton'
 
 // ── types ──────────────────────────────────────────────────────────────────────
 interface BookingData {
@@ -215,6 +216,19 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
   const otpRef = useRef<HTMLInputElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
 
+  // Chrome Android / Samsung Internet: auto-read OTP from incoming SMS.
+  // iOS Safari / Firefox use the autocomplete="one-time-code" attribute instead.
+  useEffect(() => {
+    if (phase !== 'otp') return
+    if (!('OTPCredential' in window)) return
+    const controller = new AbortController()
+    ;(navigator.credentials as CredentialsContainer & { get(o: object): Promise<{ code: string }> })
+      .get({ otp: { transport: ['sms'] }, signal: controller.signal })
+      .then((credential) => setOtp(credential.code))
+      .catch(() => { /* dismissed, timed-out, or unsupported — silent no-op */ })
+    return () => controller.abort()
+  }, [phase])
+
   const normalizePhone = (v: string) => v.replace(/\D/g, '')
 
   const sendOtp = async () => {
@@ -314,6 +328,7 @@ function StepPhone({ onNext }: { onNext: (client: ClientProfile) => void }) {
             <Label>קוד אימות</Label>
             <input ref={otpRef} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               className="field-input mt-3" placeholder="000000"
+              inputMode="numeric" autoComplete="one-time-code"
               style={{ direction: 'ltr', textAlign: 'center', fontSize: 24, letterSpacing: '0.35em' }}
               onKeyDown={e => e.key === 'Enter' && otp.length === 6 && verifyOtp()} />
           </div>
@@ -553,6 +568,11 @@ function StepDone({ data, client, onPortal }: { data: BookingData; client: Clien
         <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: 22 }}>{dateStr}</div>
         {data.time && <div className="mt-1" style={{ direction: 'ltr', textAlign: 'right', fontSize: 14, color: '#4A6B5C' }}>{data.time} · {APPOINTMENT_DURATION_MINUTES} דקות</div>}
       </div>
+      {data.date && data.time && (
+        <div className="mt-5 flex justify-center">
+          <AddToCalendarButton date={toDateStr(data.date)} time={data.time} />
+        </div>
+      )}
       <p className="mt-5" style={{ fontSize: 13, color: '#4A6B5C' }}>
         לניהול התורים שלך:{' '}
         {onPortal

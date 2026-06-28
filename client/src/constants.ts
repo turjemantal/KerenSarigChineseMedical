@@ -25,6 +25,25 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
 export const isActiveAppointment = (status: AppointmentStatus): boolean =>
   status === AppointmentStatus.Pending || status === AppointmentStatus.Scheduled
 
+// Which actions Keren (admin) may take on an appointment, by status — the single source
+// of truth for the dashboard's action buttons. A PENDING request is resolved by approving
+// or rejecting it (rescheduling auto-approves); cancel / no-show apply ONLY once it's a
+// confirmed (scheduled) appointment. Terminal statuses get no actions. Mirrors the
+// server's ALLOWED_STATUS_TRANSITIONS state machine.
+export type AdminAppointmentAction = 'approve' | 'reject' | 'reschedule' | 'remind' | 'cancel' | 'noshow'
+
+const ADMIN_ACTIONS_BY_STATUS: Record<AppointmentStatus, AdminAppointmentAction[]> = {
+  [AppointmentStatus.Pending]:   ['approve', 'reject', 'reschedule'],
+  [AppointmentStatus.Scheduled]: ['remind', 'reschedule', 'cancel', 'noshow'],
+  [AppointmentStatus.Completed]: [],
+  [AppointmentStatus.Cancelled]: [],
+  [AppointmentStatus.Rejected]:  [],
+  [AppointmentStatus.NoShow]:    [],
+}
+
+export const adminCan = (status: AppointmentStatus, action: AdminAppointmentAction): boolean =>
+  ADMIN_ACTIONS_BY_STATUS[status]?.includes(action) ?? false
+
 export const LeadStatus = {
   New: 'new',
   Contacted: 'contacted',

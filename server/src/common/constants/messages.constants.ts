@@ -32,10 +32,8 @@ export const smsOtpText = (code: string, domain: string): string => {
   return isRealDomain(domain) ? `${base}\n\n@${domain} #${code}` : base;
 };
 
-export const smsBookingText = (name: string, date: string, time: string, calendarUrl?: string): string => {
-  const base = `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} אושר. ${CLINIC_NAME}`;
-  return calendarUrl ? `${base}\nהוספה ליומן: ${calendarUrl}` : base;
-};
+export const smsBookingText = (name: string, date: string, time: string): string =>
+  `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} אושר. ${CLINIC_NAME}`;
 
 export const smsBookingRequestText = (name: string, date: string, time: string): string =>
   `שלום ${name.split(' ')[0]}, בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time} התקבלה וממתינה לאישור. נעדכן ברגע שהתור יאושר. ${CLINIC_NAME}`;

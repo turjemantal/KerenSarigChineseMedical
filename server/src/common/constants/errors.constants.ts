@@ -60,6 +60,7 @@ export const ERRORS = {
   CANNOT_RESCHEDULE_STATUS: 'לא ניתן לשנות מועד עבור תור במצב זה',
   CANNOT_REJECT_STATUS: 'ניתן לדחות רק בקשת תור שממתינה לאישור',
   CANNOT_CHANGE_TERMINAL_STATUS: 'התור כבר נסגר ולא ניתן לשנות את הסטטוס שלו',
+  INVALID_STATUS_TRANSITION: 'מעבר סטטוס לא חוקי עבור התור',
   REMINDER_SEND_FAILED: 'שליחת התזכורת נכשלה. נסו שוב.',
   rescheduleTooLate: (hours: number) =>
     `לא ניתן לשנות מועד פחות מ-${hours} שעות לפני התור. ניתן לבטל את התור.`,

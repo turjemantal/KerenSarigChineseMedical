@@ -20,7 +20,7 @@ export class WhatsappMessagingProvider implements IMessagingProvider {
     );
   }
 
-  sendBookingConfirmation(phone: string, name: string, date: string, time: string, _calendarUrl?: string): Promise<boolean> {
+  sendBookingConfirmation(phone: string, name: string, date: string, time: string): Promise<boolean> {
     return this.whatsapp.sendTemplate(
       phone,
       config.whatsapp.templates.bookingConfirmation,
