@@ -51,8 +51,8 @@ export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
 // simultaneous booking requests for the same slot can't both succeed (the loser hits a
 // duplicate-key error, which the manager translates to "slot not available"). The
 // partial filter scopes uniqueness to active appointments only, so a cancelled/rejected
-// slot is freed and can be re-booked. (Also created/repaired by migration v4 for
-// existing databases — see migrations/v4.)
+// slot is freed and can be re-booked. (On an existing DB, build/repair it on demand
+// with `npm run db:index` — scripts/build-unique-slot-index.ts.)
 AppointmentSchema.index(
   { date: 1, time: 1 },
   {

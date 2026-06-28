@@ -1,13 +1,16 @@
 /**
- * Migration v2: seed the base weekly schedule.
+ * One-off: seed the base weekly schedule.
  *
  * Idempotent, per-day ($setOnInsert): inserts a default row only for a weekday that has
- * no row yet — it NEVER overwrites a day the admin already customised. Exposes `up()`
- * for the runner (server/migrations/run.ts), which owns the connection + safety guard.
- * The default values live here only — a migration artifact, not runtime app logic.
+ * no row yet — NEVER overwrites a day the admin already customised. The default values
+ * live here only (a seed artifact, not runtime app logic). Needed once on a DB that
+ * predates DB-only scheduling.
+ *
+ *   npm run db:seed-schedule
  */
 import mongoose from 'mongoose';
-import { WeeklyScheduleDay, WeeklyScheduleDaySchema } from '../../src/weekly-schedule/weekly-schedule.schema';
+import { withDb } from './_with-db';
+import { WeeklyScheduleDay, WeeklyScheduleDaySchema } from '../src/weekly-schedule/weekly-schedule.schema';
 
 const MON_WED = ['09:00', '10:15', '11:45', '14:30', '15:45', '17:00', '18:15'];
 const TUE_THU = ['08:50', '10:00', '11:30'];
@@ -21,7 +24,7 @@ const SEED: Record<number, string[]> = {
   6: [],
 };
 
-export async function up(): Promise<void> {
+withDb('seed weekly schedule', async () => {
   const model = mongoose.models[WeeklyScheduleDay.name]
     || mongoose.model(WeeklyScheduleDay.name, WeeklyScheduleDaySchema);
   let seeded = 0;
@@ -33,5 +36,5 @@ export async function up(): Promise<void> {
     );
     if (res.upsertedCount) seeded++;
   }
-  console.log(`  weekly schedule: ${seeded} day(s) added, ${7 - seeded} already present`);
-}
+  console.log(`  ${seeded} day(s) added, ${7 - seeded} already present`);
+});

@@ -1,22 +1,19 @@
 /**
- * Migration v3: backfill existing SCHEDULED appointments into Google Calendar.
+ * One-off: backfill existing SCHEDULED appointments into Google Calendar.
  *
- * Idempotent — skips any appointment that already has a googleCalendarEventId.
- * Skips entirely when GOOGLE_CALENDAR_CREDENTIALS / GOOGLE_CALENDAR_ID are not
- * set (calendar integration not yet configured for this environment).
+ * Idempotent — skips any appointment that already has a googleCalendarEventId. Skips
+ * entirely when GOOGLE_CALENDAR_CREDENTIALS / GOOGLE_CALENDAR_ID are not set (calendar
+ * integration not configured for this environment). Run once after enabling the
+ * service-account calendar sync.
  *
- * Run: npm run migrate   (auto-discovered by server/migrations/run.ts)
+ *   APP_ENV=PROD MONGODB_URI='<prod-uri>' npm run db:backfill-calendar
  */
-import { resolve } from 'path';
-import { config as loadEnv } from 'dotenv';
-
-loadEnv({ path: resolve(process.cwd(), '../.env'), quiet: true });
-
 import mongoose from 'mongoose';
 import { auth as googleAuth, calendar } from '@googleapis/calendar';
-import { Appointment, AppointmentSchema } from '../../src/appointments/appointment.schema';
-import { AppointmentStatus } from '../../src/common/enums/appointment-status.enum';
-import { CLINIC_NAME, CLINIC_ADDRESS, CLINIC_TIMEZONE, CALENDAR_EVENT_DURATION_MINUTES } from '../../src/common/constants/defaults.constants';
+import { withDb } from './_with-db';
+import { Appointment, AppointmentSchema } from '../src/appointments/appointment.schema';
+import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
+import { CLINIC_NAME, CLINIC_ADDRESS, CLINIC_TIMEZONE, CALENDAR_EVENT_DURATION_MINUTES } from '../src/common/constants/defaults.constants';
 
 function buildEventDateTime(date: string, time: string): string {
   return `${date}T${time}:00`;
@@ -31,12 +28,12 @@ function addMinutes(date: string, time: string, minutes: number): string {
   return buildEventDateTime(date, endTime);
 }
 
-export async function up(): Promise<void> {
+withDb('backfill google calendar', async () => {
   const credentials = process.env.GOOGLE_CALENDAR_CREDENTIALS;
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
 
   if (!credentials || !calendarId) {
-    console.log('  google-calendar backfill: skipped (GOOGLE_CALENDAR_CREDENTIALS / GOOGLE_CALENDAR_ID not set)');
+    console.log('  skipped (GOOGLE_CALENDAR_CREDENTIALS / GOOGLE_CALENDAR_ID not set)');
     return;
   }
 
@@ -53,7 +50,7 @@ export async function up(): Promise<void> {
     .find({ status: AppointmentStatus.SCHEDULED, googleCalendarEventId: { $exists: false } })
     .exec();
 
-  console.log(`  google-calendar backfill: found ${pending.length} appointment(s) to sync`);
+  console.log(`  found ${pending.length} appointment(s) to sync`);
   if (pending.length === 0) return;
 
   let synced = 0;
@@ -88,5 +85,5 @@ export async function up(): Promise<void> {
     }
   }
 
-  console.log(`  google-calendar backfill: synced=${synced} failed=${failed}`);
-}
+  console.log(`  synced=${synced} failed=${failed}`);
+});

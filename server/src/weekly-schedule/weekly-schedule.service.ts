@@ -11,8 +11,8 @@ export class WeeklyScheduleService {
   constructor(private readonly dao: WeeklyScheduleDao) {}
 
   // the weekly schedule, sourced entirely from the DB. Days with no stored row are
-  // treated as closed (empty). The base schedule is seeded into the DB on deploy
-  // (server/migrations/v2/seed-weekly-schedule.ts) — it is no longer hardcoded in the app.
+  // treated as closed (empty). The base schedule is seeded into the DB by initDB (fresh
+  // volume) or `npm run db:seed-schedule` — it is no longer hardcoded in the app.
   async getSchedule(): Promise<WeekSchedule> {
     const schedule: WeekSchedule = {
       [Weekday.SUNDAY]: [],
