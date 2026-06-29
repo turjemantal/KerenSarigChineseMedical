@@ -26,8 +26,8 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **Lead capture** — contact form sends enquiries to the admin dashboard and alerts the clinic owner (SMS/WhatsApp) on every new lead
 - **OTP login** — passwordless auth via SMS or WhatsApp one-time code
 - **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone), within a configurable booking horizon (default ~6 months ahead)
-- **No double-booking (DB-enforced)** — beyond the server-side availability check, a partial **unique index** on `{date, time}` (scoped to active pending/scheduled appointments) makes it physically impossible for two appointments to occupy the same slot, even under two simultaneous requests — the loser gets a clean "slot not available". A cancelled/rejected slot is freed and can be re-booked. Created/repaired by the on-demand `npm run db:index` script
-- **Editable weekly schedule** — the base bookable hours per weekday live in the DB and are edited from the admin dashboard (no hardcoded schedule); provisioned by initDB on a fresh DB (`server/migrations/init/`) or the on-demand `npm run db:seed-schedule` script
+- **No double-booking (DB-enforced)** — beyond the server-side availability check, a partial **unique index** on `{date, time}` (scoped to active pending/scheduled appointments) makes it physically impossible for two appointments to occupy the same slot, even under two simultaneous requests — the loser gets a clean "slot not available". A cancelled/rejected slot is freed and can be re-booked. Created/repaired by the on-demand script `scripts/v4/build-unique-slot-index.ts`
+- **Editable weekly schedule** — the base bookable hours per weekday live in the DB and are edited from the admin dashboard (no hardcoded schedule); provisioned by initDB on a fresh DB (`server/migrations/init/`) or the on-demand script `scripts/v2/seed-weekly-schedule.ts`
 - **Clinic settings** — admin-configurable booking horizon (days ahead) and daily-reminder hour, stored in the DB and editable from the dashboard (no redeploy needed); read DB-only (the app never seeds defaults — see `server/migrations/`)
 - **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer). The admin can also **reject** a pending request (distinct `rejected` status) — the client is notified it couldn't be accommodated
 - **Admin-created clients & appointments** — the admin can add a client directly (name required, unique phone) and book a confirmed appointment for an existing client, found via a name/phone search; the slot still passes the server's availability check and the client gets a confirmation SMS
@@ -38,7 +38,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
 - **Automated reminders** — an hourly cron (clinic time, Asia/Jerusalem) sends reminders for the *next day's* confirmed appointments at the admin-configured hour (default 09:00); a failed send is left unmarked, and the admin can re-send a reminder for any appointment from its detail drawer
 - **Health check** — public `GET /api/health` reports app + DB status (the sanctioned read-only way to verify production)
-- **Google Calendar sync** — when configured (service account), appointments are automatically created/updated/deleted in Keren's Google Calendar on approve, reschedule, and cancel; existing appointments backfilled via the on-demand `npm run db:backfill-calendar` script; separately, clients get a client-side "Add to Google Calendar" link on the booking confirmation screen and in the portal next to every upcoming appointment (pending or scheduled) — no longer sent via SMS
+- **Google Calendar sync** — when configured (service account), appointments are automatically created/updated/deleted in Keren's Google Calendar on approve, reschedule, and cancel; existing appointments backfilled via the on-demand script `scripts/v3/backfill-google-calendar.ts`; separately, clients get a client-side "Add to Google Calendar" link on the booking confirmation screen and in the portal next to every upcoming appointment (pending or scheduled) — no longer sent via SMS
 - **OTP autofill** — SMS one-time codes autofill on iOS Safari (`autocomplete="one-time-code"`), Chrome Android and Samsung Internet (Web OTP API + SMS origin-binding footer)
 - **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection)
 - **Structured logging** — pino JSON logs shipped to Better Stack via a Vector sidecar; masked PII, request IDs, Docker log rotation; one structured line per request with string `level` ("info"/"error") and `fn`/method/url/status
@@ -108,7 +108,7 @@ kerenWebsite/
 │   │       ├── sms/               # Twilio (API-key auth) implementation
 │   │       └── whatsapp/          # WhatsApp Cloud API implementation
 │   ├── migrations/                # init/ — initDB baseline seed for a fresh local Mongo volume (mounted at container init)
-│   ├── scripts/                   # on-demand maintenance: db:index, db:seed-settings, db:seed-schedule, db:backfill-calendar, validate-env, test-sms
+│   ├── scripts/                   # on-demand maintenance (run via ts-node): _with-db.ts + v2/ (seed settings+schedule), v3/ (calendar backfill), v4/ (unique-slot index); plus validate-env, test-sms
 │   ├── tests/                     # Jest unit tests
 │   └── Dockerfile
 ├── scripts/                       # Local DB: clean / seed / backup / restore
@@ -262,7 +262,7 @@ make deploy      # Build for linux/amd64 and push to ECR
 ### Database scripts
 
 ```bash
-make db-clean    # Drop the keren-clinic DB (keeps the volume → re-run the db:seed-* scripts to re-provision)
+make db-clean    # Drop the keren-clinic DB (keeps the volume → re-run the scripts/v2 seed scripts to re-provision)
 make db-reset    # Wipe the Mongo volume + rebuild → initDB re-seeds the baseline (settings + weekly schedule)
 make db-seed     # Insert sample clients, appointments, leads
 make db-backup   # Export to ./backups/<timestamp>/
@@ -300,17 +300,18 @@ config files and prod `.env`, and restarts EC2. **A merge to `main` is a deploy.
 > (zero availability, no reminders):
 > ```bash
 > cd server
-> APP_ENV=PROD MONGODB_URI='<prod-atlas-uri>' npm run db:seed-settings
-> APP_ENV=PROD MONGODB_URI='<prod-atlas-uri>' npm run db:seed-schedule
+> P="APP_ENV=PROD MONGODB_URI='<prod-atlas-uri>'"
+> eval $P npx ts-node --transpile-only scripts/v2/seed-clinic-settings.ts
+> eval $P npx ts-node --transpile-only scripts/v2/seed-weekly-schedule.ts
 > ```
-> There is **no migration framework** — each `db:*` script is an explicit, idempotent
-> one-off you run by hand only when needed (the same remote-DB safety guard as `main.ts`
-> applies: a non-PROD run refuses a remote DB). The scripts are idempotent (schedule
-> fills only weekdays missing a row, never overwriting the admin's edits; settings insert
-> only if absent), so re-running is safe. Other on-demand scripts: `db:index` (build the
-> no-double-booking unique index, after a deploy that introduces it) and
-> `db:backfill-calendar` (one-time Google Calendar backfill). Verify with admin
-> `GET /api/weekly-schedule`
+> There is **no migration framework** — each script under `scripts/v<N>/` is an explicit,
+> idempotent one-off you run by hand only when needed (the same remote-DB safety guard as
+> `main.ts` applies: a non-PROD run refuses a remote DB). The scripts are idempotent
+> (schedule fills only weekdays missing a row, never overwriting the admin's edits;
+> settings insert only if absent), so re-running is safe. Other on-demand scripts:
+> `scripts/v4/build-unique-slot-index.ts` (build the no-double-booking unique index, after
+> a deploy that introduces it) and `scripts/v3/backfill-google-calendar.ts` (one-time
+> Google Calendar backfill). Verify with admin `GET /api/weekly-schedule`
 > (7 days) and `GET /api/clinic-settings`. Fresh **local** DBs are provisioned
 > automatically by the initDB seed (`server/migrations/init/seed.js`); initDB never runs
 > against prod (Atlas has no Mongo container).

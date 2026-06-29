@@ -6,12 +6,12 @@
  * exists, so it never overwrites settings the admin has changed. Seed values live in
  * clinic-settings.constants.ts. Needed once on a DB that predates DB-only settings.
  *
- *   npm run db:seed-settings
+ *   npx ts-node --transpile-only scripts/v2/seed-clinic-settings.ts
  */
 import mongoose from 'mongoose';
-import { withDb } from './_with-db';
-import { ClinicSettings, ClinicSettingsSchema } from '../src/clinic-settings/clinic-settings.schema';
-import { DEFAULT_BOOKING_AHEAD_DAYS, DEFAULT_REMINDER_HOUR } from '../src/common/constants/clinic-settings.constants';
+import { withDb } from '../_with-db';
+import { ClinicSettings, ClinicSettingsSchema } from '../../src/clinic-settings/clinic-settings.schema';
+import { DEFAULT_BOOKING_AHEAD_DAYS, DEFAULT_REMINDER_HOUR } from '../../src/common/constants/clinic-settings.constants';
 
 withDb('seed clinic settings', async () => {
   const model = mongoose.models[ClinicSettings.name]

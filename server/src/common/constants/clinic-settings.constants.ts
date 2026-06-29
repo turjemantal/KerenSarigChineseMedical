@@ -1,5 +1,5 @@
 // One-time SEED values for the clinic-settings document. Used ONLY by the on-demand
-// seed script (server/scripts/seed-clinic-settings.ts) to provision the DB row — never
+// seed script (server/scripts/v2/seed-clinic-settings.ts) to provision the DB row — never
 // by runtime app logic, which reads the live config from the DB and fails closed if it
 // is absent. The mongosh initDB seed (migrations/init/seed.js) carries its own copy for
 // fresh local volumes; keep the two in sync. This is the single TS definition.

@@ -6,14 +6,14 @@
  * integration not configured for this environment). Run once after enabling the
  * service-account calendar sync.
  *
- *   APP_ENV=PROD MONGODB_URI='<prod-uri>' npm run db:backfill-calendar
+ *   APP_ENV=PROD MONGODB_URI='<prod-uri>' npx ts-node --transpile-only scripts/v3/backfill-google-calendar.ts
  */
 import mongoose from 'mongoose';
 import { auth as googleAuth, calendar } from '@googleapis/calendar';
-import { withDb } from './_with-db';
-import { Appointment, AppointmentSchema } from '../src/appointments/appointment.schema';
-import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
-import { CLINIC_NAME, CLINIC_ADDRESS, CLINIC_TIMEZONE, CALENDAR_EVENT_DURATION_MINUTES } from '../src/common/constants/defaults.constants';
+import { withDb } from '../_with-db';
+import { Appointment, AppointmentSchema } from '../../src/appointments/appointment.schema';
+import { AppointmentStatus } from '../../src/common/enums/appointment-status.enum';
+import { CLINIC_NAME, CLINIC_ADDRESS, CLINIC_TIMEZONE, CALENDAR_EVENT_DURATION_MINUTES } from '../../src/common/constants/defaults.constants';
 
 function buildEventDateTime(date: string, time: string): string {
   return `${date}T${time}:00`;

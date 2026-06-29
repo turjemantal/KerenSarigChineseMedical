@@ -10,13 +10,13 @@
  * (which would make a unique build fail) by keeping the earliest and demoting the rest
  * to REJECTED, then builds the index. Re-running once the index exists is a no-op.
  *
- *   npm run db:index            # local
- *   APP_ENV=PROD MONGODB_URI='<prod-uri>' npm run db:index   # prod (after a deploy)
+ *   npx ts-node --transpile-only scripts/v4/build-unique-slot-index.ts            # local
+ *   APP_ENV=PROD MONGODB_URI='<prod-uri>' npx ts-node --transpile-only scripts/v4/build-unique-slot-index.ts   # prod
  */
 import mongoose from 'mongoose';
-import { withDb } from './_with-db';
-import { Appointment, AppointmentSchema } from '../src/appointments/appointment.schema';
-import { AppointmentStatus, ACTIVE_APPOINTMENT_STATUSES } from '../src/common/enums/appointment-status.enum';
+import { withDb } from '../_with-db';
+import { Appointment, AppointmentSchema } from '../../src/appointments/appointment.schema';
+import { AppointmentStatus, ACTIVE_APPOINTMENT_STATUSES } from '../../src/common/enums/appointment-status.enum';
 
 const INDEX_NAME = 'uniq_active_slot';
 

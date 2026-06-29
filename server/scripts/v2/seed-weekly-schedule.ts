@@ -6,11 +6,11 @@
  * live here only (a seed artifact, not runtime app logic). Needed once on a DB that
  * predates DB-only scheduling.
  *
- *   npm run db:seed-schedule
+ *   npx ts-node --transpile-only scripts/v2/seed-weekly-schedule.ts
  */
 import mongoose from 'mongoose';
-import { withDb } from './_with-db';
-import { WeeklyScheduleDay, WeeklyScheduleDaySchema } from '../src/weekly-schedule/weekly-schedule.schema';
+import { withDb } from '../_with-db';
+import { WeeklyScheduleDay, WeeklyScheduleDaySchema } from '../../src/weekly-schedule/weekly-schedule.schema';
 
 const MON_WED = ['09:00', '10:15', '11:45', '14:30', '15:45', '17:00', '18:15'];
 const TUE_THU = ['08:50', '10:00', '11:30'];
