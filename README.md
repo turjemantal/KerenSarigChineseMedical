@@ -61,7 +61,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (261 tests) |
+| **Testing** | Jest + ts-jest (269 tests) |
 
 ---
 
