@@ -2,69 +2,64 @@ import { envSchema } from '../src/config/env.validation';
 import { AppEnv } from '../src/common/enums/app-env.enum';
 import { MessagingProvider } from '../src/common/enums/messaging-provider.enum';
 
-const VALID_ACCOUNT_SID = 'AC' + 'a'.repeat(32);
-const VALID_API_KEY_SID = 'SK' + 'a'.repeat(32);
-
 const baseProdSmsEnv = {
   APP_ENV: AppEnv.Prod,
   CLIENT_URL: 'https://example.com',
   JWT_SECRET: 'secret',
   ADMIN_PASSWORD: 'password',
   MESSAGING_PROVIDER: MessagingProvider.Sms,
-  TWILIO_ACCOUNT_SID: VALID_ACCOUNT_SID,
-  TWILIO_FROM_NUMBER: '+15555555555',
+  SMS_019_USERNAME: 'keren',
+  SMS_019_TOKEN: 'topsecret',
 };
 
-describe('envSchema — Twilio API key auth', () => {
-  it('accepts a complete API key configuration', () => {
+describe('envSchema — 019sms credentials', () => {
+  it('accepts a complete 019sms configuration', () => {
     const { error } = envSchema.validate({
       ...baseProdSmsEnv,
-      TWILIO_API_KEY_SID: VALID_API_KEY_SID,
-      TWILIO_API_KEY_SECRET: 'topsecret',
+      SMS_019_SENDER: 'KerenSarig',
     });
     expect(error).toBeUndefined();
   });
 
-  it('rejects SMS in prod without an API key SID', () => {
-    const { error } = envSchema.validate({
-      ...baseProdSmsEnv,
-      TWILIO_API_KEY_SECRET: 'topsecret',
-    });
+  it('rejects SMS in prod without a username', () => {
+    const { SMS_019_USERNAME: _, ...env } = { ...baseProdSmsEnv, SMS_019_SENDER: 'KerenSarig' };
+    const { error } = envSchema.validate(env);
     expect(error).toBeDefined();
-    expect(error!.message).toContain('TWILIO_API_KEY_SID');
+    expect(error!.message).toContain('SMS_019_USERNAME');
   });
 
-  it('rejects an API key SID without its secret', () => {
-    const { error } = envSchema.validate({
-      ...baseProdSmsEnv,
-      TWILIO_API_KEY_SID: VALID_API_KEY_SID,
-    });
+  it('rejects SMS in prod without a token', () => {
+    const { SMS_019_TOKEN: _, ...env } = { ...baseProdSmsEnv, SMS_019_SENDER: 'KerenSarig' };
+    const { error } = envSchema.validate(env);
     expect(error).toBeDefined();
-    expect(error!.message).toContain('TWILIO_API_KEY_SECRET');
+    expect(error!.message).toContain('SMS_019_TOKEN');
   });
 
-  it('rejects a malformed API key SID (must start with SK)', () => {
-    const { error } = envSchema.validate({
-      ...baseProdSmsEnv,
-      TWILIO_API_KEY_SID: VALID_ACCOUNT_SID, // AC… is not an API key
-      TWILIO_API_KEY_SECRET: 'topsecret',
-    });
+  it('rejects SMS in prod without a sender', () => {
+    const { error } = envSchema.validate(baseProdSmsEnv);
     expect(error).toBeDefined();
-    expect(error!.message).toContain('TWILIO_API_KEY_SID');
+    expect(error!.message).toContain('SMS_019_SENDER');
   });
 
-  it('rejects a malformed account SID (must start with AC)', () => {
+  it('rejects a sender longer than 11 characters', () => {
     const { error } = envSchema.validate({
       ...baseProdSmsEnv,
-      TWILIO_ACCOUNT_SID: VALID_API_KEY_SID, // SK… is not an account SID
-      TWILIO_API_KEY_SID: VALID_API_KEY_SID,
-      TWILIO_API_KEY_SECRET: 'topsecret',
+      SMS_019_SENDER: 'KerenSarigTA', // 12 chars
     });
     expect(error).toBeDefined();
-    expect(error!.message).toContain('TWILIO_ACCOUNT_SID');
+    expect(error!.message).toContain('SMS_019_SENDER');
   });
 
-  it('does not require Twilio credentials in TEST env', () => {
+  it('rejects a sender with characters outside English letters/digits', () => {
+    const { error } = envSchema.validate({
+      ...baseProdSmsEnv,
+      SMS_019_SENDER: '+9721234567',
+    });
+    expect(error).toBeDefined();
+    expect(error!.message).toContain('SMS_019_SENDER');
+  });
+
+  it('does not require 019sms credentials in TEST env', () => {
     const { error } = envSchema.validate({
       APP_ENV: AppEnv.Test,
       JWT_SECRET: 'secret',
@@ -73,7 +68,7 @@ describe('envSchema — Twilio API key auth', () => {
     expect(error).toBeUndefined();
   });
 
-  it('does not require Twilio credentials when the provider is WhatsApp', () => {
+  it('does not require 019sms credentials when the provider is WhatsApp', () => {
     const { error } = envSchema.validate({
       APP_ENV: AppEnv.Prod,
       CLIENT_URL: 'https://example.com',

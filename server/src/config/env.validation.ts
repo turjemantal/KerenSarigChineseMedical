@@ -1,7 +1,7 @@
 import * as Joi from 'joi';
 import { AppEnv } from '../common/enums/app-env.enum';
 import { MessagingProvider } from '../common/enums/messaging-provider.enum';
-import { TWILIO_ACCOUNT_SID_REGEX, TWILIO_API_KEY_SID_REGEX, PHONE_REGEX } from '../common/constants/validation.constants';
+import { SMS_SENDER_REGEX, PHONE_REGEX } from '../common/constants/validation.constants';
 
 const realEnvs = [AppEnv.Dev, AppEnv.Prod];
 
@@ -58,10 +58,9 @@ export const envSchema = Joi.object({
 
   MESSAGING_PROVIDER: Joi.string().valid(...Object.values(MessagingProvider)).default(MessagingProvider.Whatsapp),
 
-  TWILIO_ACCOUNT_SID:    requiredForSmsMatching(TWILIO_ACCOUNT_SID_REGEX),
-  TWILIO_API_KEY_SID:    requiredForSmsMatching(TWILIO_API_KEY_SID_REGEX),
-  TWILIO_API_KEY_SECRET: requiredForSms,
-  TWILIO_FROM_NUMBER:    requiredForSms,
+  SMS_019_USERNAME: requiredForSms,
+  SMS_019_TOKEN:    requiredForSms,
+  SMS_019_SENDER:   requiredForSmsMatching(SMS_SENDER_REGEX),
 
   // Google Calendar sync (optional — calendar sync is silently disabled when absent)
   GOOGLE_CALENDAR_CREDENTIALS: optionalStr,

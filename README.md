@@ -54,14 +54,14 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Language** | TypeScript 5 |
 | **Database** | MongoDB (local via Docker or MongoDB Atlas) |
 | **Auth** | Passport-JWT, @nestjs/jwt |
-| **Messaging** | Twilio SMS or WhatsApp Cloud API (switchable via config) |
+| **Messaging** | 019sms.co.il SMS or WhatsApp Cloud API (switchable via config) |
 | **Validation** | Joi + custom NestJS pipe |
 | **Frontend** | React 19, Vite, Tailwind CSS 4 |
 | **Containerisation** | Docker (multi-stage), Docker Compose |
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (269 tests) |
+| **Testing** | Jest + ts-jest (280 tests) |
 
 ---
 
@@ -105,7 +105,7 @@ kerenWebsite/
 │   │   ├── clients/               # Registered clients (+ admin listing)
 │   │   └── integrations/
 │   │       ├── messaging/         # IMessagingProvider interface + DI token
-│   │       ├── sms/               # Twilio (API-key auth) implementation
+│   │       ├── sms/               # 019sms.co.il (token auth) implementation
 │   │       └── whatsapp/          # WhatsApp Cloud API implementation
 │   ├── migrations/                # init/ — initDB baseline seed for a fresh local Mongo volume (mounted at container init)
 │   ├── scripts/                   # on-demand maintenance (run via ts-node): _with-db.ts + v2/ (seed settings+schedule), v3/ (calendar backfill), v4/ (unique-slot index); plus validate-env, test-sms
@@ -193,7 +193,7 @@ Copy `.env.example` to `.env` and fill in values. The server **will not start** 
 
 | Variable | Description |
 |---|---|
-| `MESSAGING_PROVIDER` | `sms` (Twilio) or `whatsapp` — default: `whatsapp` |
+| `MESSAGING_PROVIDER` | `sms` (019sms.co.il) or `whatsapp` — default: `whatsapp` |
 
 ### Media
 
@@ -209,16 +209,17 @@ See [Messaging Providers](#messaging-providers) for provider-specific variables.
 
 The messaging system is abstracted behind `IMessagingProvider`. Switch provider by changing `MESSAGING_PROVIDER` in `.env` — no code changes needed.
 
-### Twilio SMS (`MESSAGING_PROVIDER=sms`)
+### 019sms.co.il SMS (`MESSAGING_PROVIDER=sms`)
 
 Required in `DEV` / `PROD`:
 
 | Variable | Description |
 |---|---|
-| `TWILIO_ACCOUNT_SID` | From Twilio Console dashboard (`AC...`) |
-| `TWILIO_API_KEY_SID` | Scoped API key (`SK...`) — Console → Account → API keys & tokens |
-| `TWILIO_API_KEY_SECRET` | Shown once when the API key is created |
-| `TWILIO_FROM_NUMBER` | Sender: a purchased Twilio number (`+12025551234`) or an alphanumeric sender ID (`KerenSarig`, max 11 chars, one-way only) |
+| `SMS_019_USERNAME` | Account username at 019sms.co.il |
+| `SMS_019_TOKEN` | API token — generated in the 019 web UI (Settings → API token management), shown only once |
+| `SMS_019_SENDER` | Sender name shown on the recipient's phone (`KerenSarig` — max 11 chars, English letters/digits, one-way only) |
+
+019 requires their **authorized-IP restriction** for API access — register the server's public IP in their Settings (prod: the EC2 Elastic IP).
 
 ### WhatsApp Cloud API (`MESSAGING_PROVIDER=whatsapp`)
 
@@ -245,7 +246,7 @@ cd server
 npm test
 ```
 
-269 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, configurable reminders + manual resend), weekly schedule, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
+280 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, configurable reminders + manual resend), weekly schedule, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
 
 ---
 
@@ -359,9 +360,9 @@ Other prod helpers: `make restart-prod` (skip rebuild), `make prod-logs` (tail s
 - [ ] Strong `JWT_SECRET` — `openssl rand -hex 32`
 - [ ] Strong `ADMIN_PASSWORD`
 - [ ] `CLIENT_URL` set to your public domain or IP
-- [ ] `TWILIO_API_KEY_SID` + `TWILIO_API_KEY_SECRET` set (auth token is no longer used)
-- [ ] `TWILIO_FROM_NUMBER` — purchased number or alphanumeric sender ID (e.g. `KerenSarig`)
-- [ ] Twilio account upgraded (trial only delivers to verified numbers)
+- [ ] `SMS_019_USERNAME` + `SMS_019_TOKEN` set (token from the 019 web UI, shown once)
+- [ ] `SMS_019_SENDER` — sender name (e.g. `KerenSarig`, max 11 chars, English letters/digits)
+- [ ] Server's public IP registered in 019's authorized-IP settings (prod: the EC2 Elastic IP)
 - [ ] MongoDB Atlas cluster running and IP whitelisted
 
 ---

@@ -1,8 +1,8 @@
 export const PHONE_REGEX = /^05\d{8}$/;
 export const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 export const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
-export const TWILIO_ACCOUNT_SID_REGEX = /^AC[0-9a-fA-F]{32}$/;
-export const TWILIO_API_KEY_SID_REGEX = /^SK[0-9a-fA-F]{32}$/;
+// 019sms sender ("source") — max 11 chars, English letters and digits only
+export const SMS_SENDER_REGEX = /^[A-Za-z0-9]{1,11}$/;
 
 export const NAME_MIN_LENGTH = 2;
 export const NAME_MAX_LENGTH = 100;

@@ -44,19 +44,17 @@ export const config = {
     },
   },
 
-  twilio: {
-    get accountSid(): string {
-      return process.env.TWILIO_ACCOUNT_SID!;
+  // 019sms.co.il — token generated in their web UI (Settings → API token management)
+  sms019: {
+    get username(): string {
+      return process.env.SMS_019_USERNAME!;
     },
-    // Scoped API key (SK…) + secret — revocable per-key without rotating the account token.
-    get apiKeySid(): string {
-      return process.env.TWILIO_API_KEY_SID!;
+    get token(): string {
+      return process.env.SMS_019_TOKEN!;
     },
-    get apiKeySecret(): string {
-      return process.env.TWILIO_API_KEY_SECRET!;
-    },
-    get fromNumber(): string {
-      return process.env.TWILIO_FROM_NUMBER!;
+    // sender shown on the recipient's phone — max 11 chars, English letters/digits
+    get sender(): string {
+      return process.env.SMS_019_SENDER!;
     },
   },
 

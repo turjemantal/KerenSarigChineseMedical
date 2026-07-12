@@ -1,12 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Twilio } from 'twilio';
 import { config } from '../../config';
-import { toE164, maskPhone } from '../../common/utils/phone.utils';
+import { maskPhone } from '../../common/utils/phone.utils';
+import { SMS_019_API_URL, SMS_019_SUCCESS_STATUS } from '../../common/constants/sms.constants';
 
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
-  private client: Twilio | null = null;
 
   // Resolves true on a successful hand-off (or a non-sending env), false on failure.
   async sendSms(to: string, text: string): Promise<boolean> {
@@ -18,27 +17,44 @@ export class SmsService {
       return true;
     }
 
-    const recipient = toE164(to);
+    const { username, token, sender } = config.sms019;
+    // 019sms takes the local format (05XXXXXXXX) — exactly how phones are stored.
+    // destinations.phone uses the xml2js text-node encoding: { _: <number> }.
+    const body = {
+      sms: {
+        user: { username },
+        source: sender,
+        destinations: { phone: [{ _: to }] },
+        message: text,
+      },
+    };
 
     try {
-      const message = await this.getClient().messages.create({
-        from: config.twilio.fromNumber,
-        to: recipient,
-        body: text,
+      const res = await fetch(SMS_019_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
       });
-      this.logger.log(`[SMS] Sent to ${maskPhone(recipient)} (sid=${message.sid})`);
+
+      const responseText = await res.text();
+      let parsed: { status?: number; shipment_id?: string } | null = null;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        // non-JSON body — treated as a failure below
+      }
+      if (!res.ok || parsed?.status !== SMS_019_SUCCESS_STATUS) {
+        this.logger.error(`[SMS] Failed to send to ${maskPhone(to)}: ${responseText}`);
+        return false;
+      }
+      this.logger.log(`[SMS] Sent to ${maskPhone(to)} (shipment=${parsed?.shipment_id ?? 'unknown'})`);
       return true;
     } catch (e) {
-      this.logger.error(`[SMS] Failed to send to ${maskPhone(recipient)}: ${e}`);
+      this.logger.error(`[SMS] Network error sending to ${maskPhone(to)}: ${e}`);
       return false;
     }
-  }
-
-  private getClient(): Twilio {
-    if (!this.client) {
-      const { accountSid, apiKeySid, apiKeySecret } = config.twilio;
-      this.client = new Twilio(apiKeySid, apiKeySecret, { accountSid });
-    }
-    return this.client;
   }
 }
