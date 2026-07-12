@@ -22,15 +22,21 @@ describe('envSchema — 019sms credentials', () => {
   });
 
   it('rejects SMS in prod without a username', () => {
-    const { SMS_019_USERNAME: _, ...env } = { ...baseProdSmsEnv, SMS_019_SENDER: 'KerenSarig' };
-    const { error } = envSchema.validate(env);
+    const { error } = envSchema.validate({
+      ...baseProdSmsEnv,
+      SMS_019_SENDER: 'KerenSarig',
+      SMS_019_USERNAME: undefined, // Joi treats undefined as absent
+    });
     expect(error).toBeDefined();
     expect(error!.message).toContain('SMS_019_USERNAME');
   });
 
   it('rejects SMS in prod without a token', () => {
-    const { SMS_019_TOKEN: _, ...env } = { ...baseProdSmsEnv, SMS_019_SENDER: 'KerenSarig' };
-    const { error } = envSchema.validate(env);
+    const { error } = envSchema.validate({
+      ...baseProdSmsEnv,
+      SMS_019_SENDER: 'KerenSarig',
+      SMS_019_TOKEN: undefined, // Joi treats undefined as absent
+    });
     expect(error).toBeDefined();
     expect(error!.message).toContain('SMS_019_TOKEN');
   });
