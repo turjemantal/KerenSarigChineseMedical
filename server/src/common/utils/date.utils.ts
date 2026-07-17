@@ -43,6 +43,12 @@ export function addDays(dateStr: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Minutes since midnight for an HH:MM time string
+export function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
 // All YYYY-MM-DD dates from `from` to `to` inclusive (timezone-independent)
 export function eachDateInRange(from: string, to: string): string[] {
   const dates: string[] = [];

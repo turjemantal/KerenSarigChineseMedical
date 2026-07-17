@@ -57,4 +57,22 @@ describe('computeAvailableSlots', () => {
     expect(computeAvailableSlots({ ...base, date: DATE, baseTimes: FRI_BASE, extraTimes: ['10:00'] }))
       .toEqual(['08:50', '10:00', '11:30', '12:45']);
   });
+
+  it('hides candidates within 45 minutes of a taken time on either side', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['17:30', '18:00', '18:15', '18:45'], takenTimes: ['18:00'],
+    })).toEqual(['18:45']); // 17:30 and 18:15 are both < 45 min from 18:00
+  });
+
+  it('keeps a candidate exactly 45 minutes away from a taken time (strict <)', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['18:00', '18:45'], takenTimes: ['18:00'],
+    })).toEqual(['18:45']);
+  });
+
+  it('hides a shifted extra slot too close to a taken base time', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['18:00'], extraTimes: ['18:20'], takenTimes: ['18:00'],
+    })).toEqual([]);
+  });
 });

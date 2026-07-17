@@ -7,6 +7,9 @@ import { CreateScheduleBlockDto } from './dto/create-schedule-block.dto';
 import { MAX_PUBLIC_RANGE_DAYS, DATE_REGEX } from '../common/constants/validation.constants';
 import { ERRORS } from '../common/constants/errors.constants';
 import { MS_PER_DAY } from '../common/constants/time.constants';
+import { APPOINTMENT_DURATION_MINUTES } from '../common/constants/schedule.constants';
+import { timeToMinutes, weekdayOf } from '../common/utils/date.utils';
+import { WeeklyScheduleManager } from '../weekly-schedule/weekly-schedule.manager';
 
 export interface PublicScheduleBlock {
   startDate: string;
@@ -20,6 +23,7 @@ export class ScheduleBlocksManager {
   constructor(
     private readonly service: ScheduleBlocksService,
     private readonly extraSlots: ExtraSlotsService,
+    private readonly weeklySchedule: WeeklyScheduleManager,
   ) {}
 
   async create(dto: CreateScheduleBlockDto): Promise<ScheduleBlockDocument> {
@@ -71,8 +75,26 @@ export class ScheduleBlocksManager {
   }
 
   // ─── Extra slots (admin opens additional bookable times on a date) ──────────
-  addExtraSlot(date: string, time: string): Promise<ExtraSlotDocument> {
+  async addExtraSlot(date: string, time: string): Promise<ExtraSlotDocument> {
+    await this.assertNoOverlap(date, time);
     return this.extraSlots.create(date, time);
+  }
+
+  // An extra slot must be at least APPOINTMENT_DURATION_MINUTES from every base
+  // weekly-schedule time on that date's weekday and from every other extra slot
+  // already open on that date. (Not checked against existing appointments here —
+  // that would require injecting AppointmentsManager, creating a circular module
+  // dependency; the actual booking is still protected by computeAvailableSlots.)
+  private async assertNoOverlap(date: string, time: string): Promise<void> {
+    const minutes = timeToMinutes(time);
+    const schedule = await this.weeklySchedule.getSchedule();
+    const baseTimes = schedule[weekdayOf(date)] ?? [];
+    const existingExtras = await this.extraSlots.findByDate(date);
+    const otherTimes = [...baseTimes, ...existingExtras.map(s => s.time)];
+    const overlaps = otherTimes.some(t => Math.abs(timeToMinutes(t) - minutes) < APPOINTMENT_DURATION_MINUTES);
+    if (overlaps) {
+      throw new BadRequestException(ERRORS.EXTRA_SLOT_OVERLAPS);
+    }
   }
 
   getExtraSlots(): Promise<ExtraSlotDocument[]> {

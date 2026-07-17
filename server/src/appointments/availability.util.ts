@@ -1,3 +1,6 @@
+import { APPOINTMENT_DURATION_MINUTES } from '../common/constants/schedule.constants';
+import { timeToMinutes } from '../common/utils/date.utils';
+
 export interface BlockLike {
   startDate: string;
   endDate: string;
@@ -27,16 +30,21 @@ export interface AvailabilityInput {
 }
 
 // The single source of truth for which slots are bookable on a date:
-//   base weekly schedule ∪ extra slots − taken − blocked − past − beyond horizon
+//   base weekly schedule ∪ extra slots − taken (± APPOINTMENT_DURATION_MINUTES) − blocked − past − beyond horizon
+// A candidate is unavailable if it falls within APPOINTMENT_DURATION_MINUTES of any
+// taken time in either direction (an appointment occupies that whole window, not just
+// its exact start time) — a candidate exactly APPOINTMENT_DURATION_MINUTES away stays
+// available (strict "<", not "<=").
 export function computeAvailableSlots(input: AvailabilityInput): string[] {
   const { date, baseTimes, extraTimes, takenTimes, blocks, today, nowTime, maxDate } = input;
   if (date < today || date > maxDate) return [];
 
   const candidate = Array.from(new Set([...baseTimes, ...extraTimes])).sort();
-  const taken = new Set(takenTimes);
+  const takenMinutes = takenTimes.map(timeToMinutes);
 
   return candidate.filter(time => {
-    if (taken.has(time)) return false;
+    const minutes = timeToMinutes(time);
+    if (takenMinutes.some(t => Math.abs(t - minutes) < APPOINTMENT_DURATION_MINUTES)) return false;
     if (isBlocked(date, time, blocks)) return false;
     if (date === today && time <= nowTime) return false;
     return true;

@@ -8,6 +8,7 @@ import { ScheduleBlocksService } from './schedule-blocks.service';
 import { ScheduleBlocksDao } from './schedule-blocks.dao';
 import { ExtraSlotsService } from './extra-slots.service';
 import { ExtraSlotsDao } from './extra-slots.dao';
+import { WeeklyScheduleModule } from '../weekly-schedule/weekly-schedule.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ExtraSlotsDao } from './extra-slots.dao';
       { name: ScheduleBlock.name, schema: ScheduleBlockSchema },
       { name: ExtraSlot.name, schema: ExtraSlotSchema },
     ]),
+    WeeklyScheduleModule,
   ],
   controllers: [ScheduleBlocksController],
   providers: [ScheduleBlocksManager, ScheduleBlocksService, ScheduleBlocksDao, ExtraSlotsService, ExtraSlotsDao],

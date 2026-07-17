@@ -1140,11 +1140,14 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
   const [creating, setCreating] = useState(false)
   const [rescheduling, setRescheduling] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
   const [reminder, setReminder] = useState<'idle' | 'sending' | 'failed'>('idle')
   // ONE in-flight guard for every drawer action — stops a second action (e.g. cancel then
   // reject) firing against the same appointment before the first response lands.
   const [busy, setBusy] = useState(false)
-  const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
+  const byStatus = filter === 'all' ? appointments : appointments.filter(a => a.status === filter)
+  const q = search.trim()
+  const filtered = q ? byStatus.filter(a => a.name.includes(q) || a.phone.includes(q)) : byStatus
   // derive the open appointment from the live list, never a frozen snapshot, so the drawer
   // always reflects the current status and shows only the buttons valid for that state.
   const selected = appointments.find(a => a._id === selectedId) ?? null
@@ -1226,6 +1229,10 @@ function AppointmentsView({ appointments, clients, onStatusChange }: { appointme
               {l}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-2 px-3 h-10 flex-1 max-w-[320px]" style={{ background: '#FFFFFF', border: '1px solid rgba(28,42,36,0.15)', borderRadius: 2 }}>
+          <Icon.Search s={16} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש לפי שם או טלפון…" className="flex-1 bg-transparent outline-none text-[13px]" />
         </div>
         <Button variant="primary" size="sm" onClick={() => setCreating(true)}>+ תור חדש</Button>
       </div>

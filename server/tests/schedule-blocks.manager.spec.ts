@@ -3,6 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 import { ScheduleBlocksManager } from '../src/schedule-blocks/schedule-blocks.manager';
 import { ScheduleBlocksService } from '../src/schedule-blocks/schedule-blocks.service';
 import { ExtraSlotsService } from '../src/schedule-blocks/extra-slots.service';
+import { WeeklyScheduleManager } from '../src/weekly-schedule/weekly-schedule.manager';
+import { Weekday } from '../src/common/enums/weekday.enum';
 import { createScheduleBlockSchema } from '../src/schedule-blocks/dto/validations/schedule-block.schemas';
 
 const dayBlock = { _id: 'b1', startDate: '2026-07-01', endDate: '2026-07-01', reason: 'השתלמות' };
@@ -19,8 +21,18 @@ const mockService = {
 const mockExtraSlots = {
   create: jest.fn(),
   findAll: jest.fn(),
+  findByDate: jest.fn(),
   findInRange: jest.fn(),
   delete: jest.fn(),
+};
+
+const mockWeeklySchedule = {
+  getSchedule: jest.fn(),
+};
+
+const emptySchedule = {
+  [Weekday.SUNDAY]: [], [Weekday.MONDAY]: [], [Weekday.TUESDAY]: [], [Weekday.WEDNESDAY]: [],
+  [Weekday.THURSDAY]: [], [Weekday.FRIDAY]: [], [Weekday.SATURDAY]: [],
 };
 
 describe('ScheduleBlocksManager', () => {
@@ -32,6 +44,7 @@ describe('ScheduleBlocksManager', () => {
         ScheduleBlocksManager,
         { provide: ScheduleBlocksService, useValue: mockService },
         { provide: ExtraSlotsService, useValue: mockExtraSlots },
+        { provide: WeeklyScheduleManager, useValue: mockWeeklySchedule },
       ],
     }).compile();
     manager = module.get<ScheduleBlocksManager>(ScheduleBlocksManager);
@@ -106,6 +119,31 @@ describe('ScheduleBlocksManager', () => {
       mockService.delete.mockResolvedValueOnce(undefined);
       await manager.remove('b1');
       expect(mockService.delete).toHaveBeenCalledWith('b1');
+    });
+  });
+
+  describe('addExtraSlot', () => {
+    it('rejects a time overlapping a base weekly-schedule time', async () => {
+      // 2026-07-01 is a Wednesday
+      mockWeeklySchedule.getSchedule.mockResolvedValueOnce({ ...emptySchedule, [Weekday.WEDNESDAY]: ['18:00'] });
+      mockExtraSlots.findByDate.mockResolvedValueOnce([]);
+      await expect(manager.addExtraSlot('2026-07-01', '18:15')).rejects.toThrow(BadRequestException);
+      expect(mockExtraSlots.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a time overlapping an existing extra slot on the same date', async () => {
+      mockWeeklySchedule.getSchedule.mockResolvedValueOnce(emptySchedule);
+      mockExtraSlots.findByDate.mockResolvedValueOnce([{ _id: 'e1', date: '2026-07-01', time: '16:00' }]);
+      await expect(manager.addExtraSlot('2026-07-01', '16:20')).rejects.toThrow(BadRequestException);
+      expect(mockExtraSlots.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a properly spaced extra slot', async () => {
+      mockWeeklySchedule.getSchedule.mockResolvedValueOnce({ ...emptySchedule, [Weekday.WEDNESDAY]: ['18:00'] });
+      mockExtraSlots.findByDate.mockResolvedValueOnce([]);
+      mockExtraSlots.create.mockResolvedValueOnce({ _id: 'e2', date: '2026-07-01', time: '18:45' });
+      await manager.addExtraSlot('2026-07-01', '18:45');
+      expect(mockExtraSlots.create).toHaveBeenCalledWith('2026-07-01', '18:45');
     });
   });
 });
