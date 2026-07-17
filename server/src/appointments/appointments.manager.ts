@@ -62,6 +62,7 @@ export class AppointmentsManager {
     if (config.adminPhone) {
       this.notify('admin-alert', id, this.messaging.sendNewBookingAlert(config.adminPhone, appt.name, appt.date, appt.time));
     }
+    this.syncCalendarCreate(id, appt);
     return appt;
   }
 
@@ -229,10 +230,11 @@ export class AppointmentsManager {
     if (approved) {
       this.logger.log(`[Appointment] approved appt=${id} phone=${maskPhone(updated.phone)}`);
       this.notify('confirmation', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
-      this.syncCalendarCreate(id, updated);
+      this.syncCalendarUpdate(id, existing.googleCalendarEventId, updated);
     }
     const cancelled =
-      existing.status === AppointmentStatus.SCHEDULED && updated.status === AppointmentStatus.CANCELLED;
+      (existing.status === AppointmentStatus.PENDING || existing.status === AppointmentStatus.SCHEDULED) &&
+      updated.status === AppointmentStatus.CANCELLED;
     if (cancelled) {
       this.syncCalendarDelete(id, existing.googleCalendarEventId);
     }
@@ -330,12 +332,15 @@ export class AppointmentsManager {
     const updated = await this.service.update(id, { status: AppointmentStatus.REJECTED });
     this.logger.log(`[Appointment] rejected appt=${id} phone=${maskPhone(updated.phone)}`);
     this.notify('rejected', id, this.messaging.sendBookingRejected(updated.phone, updated.name, updated.date, updated.time));
+    this.syncCalendarDelete(id, appt.googleCalendarEventId);
     return updated;
   }
 
   async remove(id: string): Promise<void> {
+    const appt = await this.service.findById(id);
     await this.service.delete(id);
     this.logger.log(`[Appointment] deleted appt=${id}`);
+    this.syncCalendarDelete(id, appt.googleCalendarEventId);
   }
 
   // Runs hourly (pinned to clinic time) and only acts at the admin-configured

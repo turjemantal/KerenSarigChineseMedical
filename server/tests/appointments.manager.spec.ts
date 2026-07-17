@@ -612,6 +612,7 @@ describe('AppointmentsManager', () => {
     });
 
     it('delegates delete to service', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1);
       mockService.delete.mockResolvedValueOnce(undefined);
       await manager.remove('a1');
       expect(mockService.delete).toHaveBeenCalledWith('a1');
@@ -619,8 +620,28 @@ describe('AppointmentsManager', () => {
   });
 
   describe('Google Calendar sync', () => {
-    it('creates a calendar event when approve() transitions PENDING → SCHEDULED', async () => {
-      mockService.findById.mockResolvedValueOnce(appt1);
+    it('creates a calendar event for a new pending booking request', async () => {
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: FUTURE_TIME }] });
+      mockService.create.mockResolvedValueOnce(appt1);
+      await manager.book({ date: FUTURE_DATE, time: FUTURE_TIME }, { phone: '0501111111' });
+      await flushVoidPromises();
+      expect(mockCalendar.createEvent).toHaveBeenCalledWith(appt1);
+      expect(mockService.setCalendarEventId).toHaveBeenCalledWith('a1', 'evt-123');
+    });
+
+    it('rewrites the event (updateEvent) when approve() transitions PENDING → SCHEDULED with an existing event', async () => {
+      const pendingWithEvent = { ...appt1, googleCalendarEventId: 'evt-pending' };
+      mockService.findById.mockResolvedValueOnce(pendingWithEvent);
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      mockService.update.mockResolvedValueOnce(scheduled);
+      await manager.approve('a1');
+      await flushVoidPromises();
+      expect(mockCalendar.updateEvent).toHaveBeenCalledWith('evt-pending', scheduled);
+      expect(mockCalendar.createEvent).not.toHaveBeenCalled();
+    });
+
+    it('falls back to creating the event when approve() promotes a pending request that never got one', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1); // no googleCalendarEventId
       const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
       mockService.update.mockResolvedValueOnce(scheduled);
       await manager.approve('a1');
@@ -673,12 +694,57 @@ describe('AppointmentsManager', () => {
       expect(mockCalendar.createEvent).toHaveBeenCalledWith(promoted);
     });
 
-    it('does not delete the calendar event when cancelling a PENDING appointment (no event existed)', async () => {
+    it('does not attempt a delete call when cancelling a PENDING appointment that never got an event', async () => {
       const pending = { ...appt1, status: AppointmentStatus.PENDING };
       mockService.findById.mockResolvedValueOnce(pending);
       const cancelled = { ...pending, status: AppointmentStatus.CANCELLED };
       mockService.update.mockResolvedValueOnce(cancelled);
       await manager.update('a1', { status: AppointmentStatus.CANCELLED });
+      await flushVoidPromises();
+      expect(mockCalendar.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('deletes the calendar event when a PENDING appointment (with an event) is cancelled', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING, googleCalendarEventId: 'evt-pending' };
+      mockService.findById.mockResolvedValueOnce(pending);
+      const cancelled = { ...pending, status: AppointmentStatus.CANCELLED };
+      mockService.update.mockResolvedValueOnce(cancelled);
+      await manager.update('a1', { status: AppointmentStatus.CANCELLED });
+      await flushVoidPromises();
+      expect(mockCalendar.deleteEvent).toHaveBeenCalledWith('evt-pending');
+    });
+
+    it('deletes the calendar event when a pending request is rejected', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING, googleCalendarEventId: 'evt-pending' };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockService.update.mockResolvedValueOnce({ ...pending, status: AppointmentStatus.REJECTED });
+      await manager.reject('a1');
+      await flushVoidPromises();
+      expect(mockCalendar.deleteEvent).toHaveBeenCalledWith('evt-pending');
+    });
+
+    it('does not attempt a delete call when rejecting a pending request that never got an event', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1); // no googleCalendarEventId
+      mockService.update.mockResolvedValueOnce({ ...appt1, status: AppointmentStatus.REJECTED });
+      await manager.reject('a1');
+      await flushVoidPromises();
+      expect(mockCalendar.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('deletes the calendar event when an appointment is removed (hard-deleted)', async () => {
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED, googleCalendarEventId: 'evt-to-remove' };
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockService.delete.mockResolvedValueOnce(undefined);
+      await manager.remove('a1');
+      await flushVoidPromises();
+      expect(mockService.delete).toHaveBeenCalledWith('a1');
+      expect(mockCalendar.deleteEvent).toHaveBeenCalledWith('evt-to-remove');
+    });
+
+    it('does not attempt a delete call when removing an appointment that never got an event', async () => {
+      mockService.findById.mockResolvedValueOnce(appt1); // no googleCalendarEventId
+      mockService.delete.mockResolvedValueOnce(undefined);
+      await manager.remove('a1');
       await flushVoidPromises();
       expect(mockCalendar.deleteEvent).not.toHaveBeenCalled();
     });

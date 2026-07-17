@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GoogleCalendarService } from '../src/integrations/google-calendar/google-calendar.service';
 import { AppointmentDocument } from '../src/appointments/appointment.schema';
+import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
+import { CALENDAR_EVENT_SUMMARY, CALENDAR_EVENT_SUMMARY_PENDING } from '../src/common/constants/defaults.constants';
 
 // mock @googleapis/calendar so no real HTTP calls are made.
 // The fns are defined inside the factory (jest.mock is hoisted above const declarations)
@@ -36,6 +38,7 @@ const makeAppt = (overrides = {}) => ({
   treatment: 'טיפול',
   concern: 'כאב גב',
   notes: '',
+  status: AppointmentStatus.SCHEDULED,
   ...overrides,
 } as unknown as AppointmentDocument);
 
@@ -84,6 +87,20 @@ describe('GoogleCalendarService', () => {
       const { requestBody } = mockEventsInsert.mock.calls[0][0];
       // 09:00 + 50 min = 09:50
       expect(requestBody.end.dateTime).toContain('09:50');
+    });
+
+    it('uses the normal summary for a scheduled appointment', async () => {
+      mockEventsInsert.mockResolvedValueOnce({ data: { id: 'evt-1' } });
+      await service.createEvent(makeAppt({ status: AppointmentStatus.SCHEDULED }));
+      const { requestBody } = mockEventsInsert.mock.calls[0][0];
+      expect(requestBody.summary).toBe(CALENDAR_EVENT_SUMMARY);
+    });
+
+    it('uses the pending summary for a pending appointment', async () => {
+      mockEventsInsert.mockResolvedValueOnce({ data: { id: 'evt-1' } });
+      await service.createEvent(makeAppt({ status: AppointmentStatus.PENDING }));
+      const { requestBody } = mockEventsInsert.mock.calls[0][0];
+      expect(requestBody.summary).toBe(CALENDAR_EVENT_SUMMARY_PENDING);
     });
 
     it('returns null and does not throw when the API call fails', async () => {

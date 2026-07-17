@@ -27,18 +27,19 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **OTP login** — passwordless auth via SMS or WhatsApp one-time code
 - **Appointment booking** — real-time slot availability; only future slots on working days (enforced server-side on the clinic's timezone), within a configurable booking horizon (default ~6 months ahead)
 - **No double-booking (DB-enforced)** — beyond the server-side availability check, a partial **unique index** on `{date, time}` (scoped to active pending/scheduled appointments) makes it physically impossible for two appointments to occupy the same slot, even under two simultaneous requests — the loser gets a clean "slot not available". A cancelled/rejected slot is freed and can be re-booked. Created/repaired by the on-demand script `scripts/v4/build-unique-slot-index.ts`
+- **45-minute minimum spacing** — every appointment occupies a 45-minute window (`APPOINTMENT_DURATION_MINUTES`), enforced in three layers so an admin schedule change can never create an overlapping double-booking: (1) `computeAvailableSlots` hides any candidate time within 45 minutes of an already-taken time (exactly 45 minutes apart stays bookable); (2) saving the weekly schedule rejects two day-times less than 45 minutes apart; (3) opening an extra slot rejects a time within 45 minutes of a base weekly time or another extra slot on that date
 - **Editable weekly schedule** — the base bookable hours per weekday live in the DB and are edited from the admin dashboard (no hardcoded schedule); provisioned by initDB on a fresh DB (`server/migrations/init/`) or the on-demand script `scripts/v2/seed-weekly-schedule.ts`
 - **Clinic settings** — admin-configurable booking horizon (days ahead) and daily-reminder hour, stored in the DB and editable from the dashboard (no redeploy needed); read DB-only (the app never seeds defaults — see `server/migrations/`)
 - **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer). The admin can also **reject** a pending request (distinct `rejected` status) — the client is notified it couldn't be accommodated
 - **Admin-created clients & appointments** — the admin can add a client directly (name required, unique phone) and book a confirmed appointment for an existing client, found via a name/phone search; the slot still passes the server's availability check and the client gets a confirmation SMS
-- **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API
+- **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API. Extra slots (one-off opened times) are rejected if within 45 minutes of a base weekly time or another extra slot
 - **Client portal** — authenticated clients view, cancel, reschedule, and **book new appointments directly from the portal** (opens the booking calendar in place — no navigation away); reschedule allowed only within the free window, ≥24h before; enforced server-side; after a successful reschedule the card refreshes in place
 - **Admin reschedule** — the admin can move any active appointment to a new slot from its detail drawer, sharing the client's slot-picker and reschedule logic; the admin bypasses the ownership + 24h free-window limits, but the server still re-checks the new slot is genuinely free (no double-booking). Rescheduling a *pending* request auto-approves it (choosing the new time = accepting it)
 - **Session handling** — both admin and client sessions detect an expired/invalid JWT (proactively on load and on any 401) and return to the login screen with a "session expired" notice instead of a stuck view
-- **Admin dashboard** — lead pipeline, appointment management, calendar (week view on desktop, day agenda on mobile), fully usable from a phone
+- **Admin dashboard** — lead pipeline, appointment management (with a name/phone search box alongside the status filter tabs), calendar (week view on desktop, day agenda on mobile), fully usable from a phone
 - **Automated reminders** — an hourly cron (clinic time, Asia/Jerusalem) sends reminders for the *next day's* confirmed appointments at the admin-configured hour (default 09:00); a failed send is left unmarked, and the admin can re-send a reminder for any appointment from its detail drawer
 - **Health check** — public `GET /api/health` reports app + DB status (the sanctioned read-only way to verify production)
-- **Google Calendar sync** — when configured (service account), appointments are automatically created/updated/deleted in Keren's Google Calendar on approve, reschedule, and cancel; existing appointments backfilled via the on-demand script `scripts/v3/backfill-google-calendar.ts`; separately, clients get a client-side "Add to Google Calendar" link on the booking confirmation screen and in the portal next to every upcoming appointment (pending or scheduled) — no longer sent via SMS
+- **Google Calendar sync** — when configured (service account), a calendar event is created the moment a client books, marked "ממתין לאישור" (awaiting approval) in its title so a pending request is visible in the calendar right away; on approve, the event is rewritten to the normal (non-pending) title; on reject, cancel (pending or scheduled), or admin hard-delete, the event is removed; on reschedule, the event is moved. Existing appointments backfilled via the on-demand script `scripts/v3/backfill-google-calendar.ts`; separately, clients get a client-side "Add to Google Calendar" link on the booking confirmation screen and in the portal next to every upcoming appointment (pending or scheduled) — no longer sent via SMS
 - **OTP autofill** — SMS one-time codes autofill on iOS Safari (`autocomplete="one-time-code"`), Chrome Android and Samsung Internet (Web OTP API + SMS origin-binding footer)
 - **Abuse protection** — per-IP + per-phone rate limits on OTP/SMS (cost protection)
 - **Structured logging** — pino JSON logs shipped to Better Stack via a Vector sidecar; masked PII, request IDs, Docker log rotation; one structured line per request with string `level` ("info"/"error") and `fn`/method/url/status
@@ -61,7 +62,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (280 tests) |
+| **Testing** | Jest + ts-jest (299 tests) |
 
 ---
 
@@ -246,7 +247,7 @@ cd server
 npm test
 ```
 
-280 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, configurable reminders + manual resend), weekly schedule, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
+299 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, configurable reminders + manual resend, Google Calendar sync for pending/approved/rejected/cancelled/deleted appointments), weekly schedule (incl. the 45-minute spacing rule), extra slots, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
 
 ---
 

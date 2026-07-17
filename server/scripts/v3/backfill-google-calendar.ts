@@ -1,10 +1,11 @@
 /**
- * One-off: backfill existing SCHEDULED appointments into Google Calendar.
+ * One-off: backfill existing SCHEDULED and PENDING appointments into Google Calendar.
  *
  * Idempotent — skips any appointment that already has a googleCalendarEventId. Skips
  * entirely when GOOGLE_CALENDAR_CREDENTIALS / GOOGLE_CALENDAR_ID are not set (calendar
  * integration not configured for this environment). Run once after enabling the
- * service-account calendar sync.
+ * service-account calendar sync, or again after the pending-request sync change to
+ * pick up any pending requests that never got an event.
  *
  *   APP_ENV=PROD MONGODB_URI='<prod-uri>' npx ts-node --transpile-only scripts/v3/backfill-google-calendar.ts
  */
@@ -13,7 +14,13 @@ import { auth as googleAuth, calendar } from '@googleapis/calendar';
 import { withDb } from '../_with-db';
 import { Appointment, AppointmentSchema } from '../../src/appointments/appointment.schema';
 import { AppointmentStatus } from '../../src/common/enums/appointment-status.enum';
-import { CLINIC_NAME, CLINIC_ADDRESS, CLINIC_TIMEZONE, CALENDAR_EVENT_DURATION_MINUTES } from '../../src/common/constants/defaults.constants';
+import {
+  CLINIC_ADDRESS,
+  CLINIC_TIMEZONE,
+  CALENDAR_EVENT_DURATION_MINUTES,
+  CALENDAR_EVENT_SUMMARY,
+  CALENDAR_EVENT_SUMMARY_PENDING,
+} from '../../src/common/constants/defaults.constants';
 
 function buildEventDateTime(date: string, time: string): string {
   return `${date}T${time}:00`;
@@ -46,17 +53,20 @@ withDb('backfill google calendar', async () => {
   const model = mongoose.models[Appointment.name]
     || mongoose.model(Appointment.name, AppointmentSchema);
 
-  const pending = await model
-    .find({ status: AppointmentStatus.SCHEDULED, googleCalendarEventId: { $exists: false } })
+  const toSync = await model
+    .find({
+      status: { $in: [AppointmentStatus.SCHEDULED, AppointmentStatus.PENDING] },
+      googleCalendarEventId: { $exists: false },
+    })
     .exec();
 
-  console.log(`  found ${pending.length} appointment(s) to sync`);
-  if (pending.length === 0) return;
+  console.log(`  found ${toSync.length} appointment(s) to sync`);
+  if (toSync.length === 0) return;
 
   let synced = 0;
   let failed = 0;
 
-  for (const appt of pending) {
+  for (const appt of toSync) {
     const descriptionLines = [`שם: ${appt.name}`];
     if (appt.treatment) descriptionLines.push(`טיפול: ${appt.treatment}`);
     if (appt.concern) descriptionLines.push(`פנייה: ${appt.concern}`);
@@ -66,7 +76,7 @@ withDb('backfill google calendar', async () => {
       const res = await calendarClient.events.insert({
         calendarId,
         requestBody: {
-          summary: `תור - ${CLINIC_NAME}`,
+          summary: appt.status === AppointmentStatus.PENDING ? CALENDAR_EVENT_SUMMARY_PENDING : CALENDAR_EVENT_SUMMARY,
           location: CLINIC_ADDRESS,
           description: descriptionLines.join('\n'),
           start: { dateTime: buildEventDateTime(appt.date, appt.time), timeZone: CLINIC_TIMEZONE },

@@ -10,3 +10,5 @@ export const DEFAULT_APPOINTMENT_TREATMENT = 'טיפול משולב של דיק�
 export const DEFAULT_LEAD_TREATMENT = 'ייעוץ ראשוני';
 
 export const CALENDAR_EVENT_DURATION_MINUTES = 50;
+export const CALENDAR_EVENT_SUMMARY = `תור - ${CLINIC_NAME}`;
+export const CALENDAR_EVENT_SUMMARY_PENDING = `תור (ממתין לאישור) - ${CLINIC_NAME}`;

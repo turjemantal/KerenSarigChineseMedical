@@ -2,7 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { auth, calendar } from '@googleapis/calendar';
 import { AppointmentDocument } from '../../appointments/appointment.schema';
 import { config } from '../../config';
-import { CLINIC_NAME, CLINIC_ADDRESS, CLINIC_TIMEZONE, CALENDAR_EVENT_DURATION_MINUTES } from '../../common/constants/defaults.constants';
+import {
+  CLINIC_ADDRESS,
+  CLINIC_TIMEZONE,
+  CALENDAR_EVENT_DURATION_MINUTES,
+  CALENDAR_EVENT_SUMMARY,
+  CALENDAR_EVENT_SUMMARY_PENDING,
+} from '../../common/constants/defaults.constants';
+import { AppointmentStatus } from '../../common/enums/appointment-status.enum';
 
 @Injectable()
 export class GoogleCalendarService {
@@ -41,7 +48,7 @@ export class GoogleCalendarService {
     if (appt.notes) descriptionLines.push(`הערות: ${appt.notes}`);
 
     return {
-      summary: `תור - ${CLINIC_NAME}`,
+      summary: appt.status === AppointmentStatus.PENDING ? CALENDAR_EVENT_SUMMARY_PENDING : CALENDAR_EVENT_SUMMARY,
       location: CLINIC_ADDRESS,
       description: descriptionLines.join('\n'),
       start: {
