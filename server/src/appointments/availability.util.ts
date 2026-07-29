@@ -8,13 +8,19 @@ export interface BlockLike {
   endTime?: string;
 }
 
-// Is a specific time blocked on a date? Full-day blocks (no times) close the
-// whole day; timed blocks close [startTime, endTime).
+// Is a slot starting at `time` blocked on a date? An appointment occupies the whole
+// [time, time + APPOINTMENT_DURATION_MINUTES) window, so a timed block closes every
+// slot whose window OVERLAPS [startTime, endTime) — not just one whose start falls
+// inside it (a 09:00 slot runs into a 09:30–11:00 block and must be closed). A slot
+// that ends exactly when the block starts stays open. Full-day blocks (no times)
+// close the whole day.
 function isBlocked(date: string, time: string, blocks: BlockLike[]): boolean {
+  const start = timeToMinutes(time);
+  const end = start + APPOINTMENT_DURATION_MINUTES;
   return blocks.some(b => {
     if (date < b.startDate || date > b.endDate) return false;
     if (!b.startTime || !b.endTime) return true;
-    return time >= b.startTime && time < b.endTime;
+    return start < timeToMinutes(b.endTime) && end > timeToMinutes(b.startTime);
   });
 }
 

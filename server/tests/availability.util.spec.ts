@@ -1,4 +1,5 @@
 import { computeAvailableSlots } from '../src/appointments/availability.util';
+import { oneAppointmentAfter, justInsideWindow } from './helpers/time';
 
 const MON_BASE = ['09:00', '10:15', '11:45', '14:30', '15:45', '17:00', '18:15'];
 const FRI_BASE = ['08:50', '10:00', '11:30', '12:45'];
@@ -37,7 +38,46 @@ describe('computeAvailableSlots', () => {
   it('removes times inside a blocked hour range only', () => {
     expect(computeAvailableSlots({
       ...base, date: DATE, baseTimes: FRI_BASE, blocks: [{ startDate: DATE, endDate: DATE, startTime: '09:00', endTime: '11:00' }],
-    })).toEqual(['08:50', '11:30', '12:45']); // 10:00 removed
+    })).toEqual(['11:30', '12:45']); // 10:00 starts inside the block; 08:50 runs into it
+  });
+
+  // A slot occupies APPOINTMENT_DURATION_MINUTES, so a block closes every slot whose
+  // WINDOW overlaps it — not only one whose start time falls inside it.
+  it('removes a slot that starts before a block but runs into it', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['09:00'], blocks: [{ startDate: DATE, endDate: DATE, startTime: '09:30', endTime: '11:00' }],
+    })).toEqual([]);
+  });
+
+  it('keeps a slot that ends exactly when a block starts', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['09:00'], blocks: [{ startDate: DATE, endDate: DATE, startTime: oneAppointmentAfter('09:00'), endTime: '11:00' }],
+    })).toEqual(['09:00']);
+  });
+
+  it('removes a slot that runs one minute into a block', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['09:00'], blocks: [{ startDate: DATE, endDate: DATE, startTime: justInsideWindow('09:00'), endTime: '11:00' }],
+    })).toEqual([]);
+  });
+
+  it('keeps a slot that starts exactly when a block ends', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['11:00'], blocks: [{ startDate: DATE, endDate: DATE, startTime: '09:00', endTime: '11:00' }],
+    })).toEqual(['11:00']);
+  });
+
+  it('removes an extra slot whose window overlaps a block', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: [], extraTimes: ['13:00'], blocks: [{ startDate: DATE, endDate: DATE, startTime: '13:15', endTime: '14:00' }],
+    })).toEqual([]);
+  });
+
+  it('applies the overlap rule on every date of a multi-day timed block', () => {
+    const block = { startDate: '2099-05-01', endDate: '2099-05-03', startTime: '09:30', endTime: '11:00' };
+    for (const date of ['2099-05-01', '2099-05-02', '2099-05-03']) {
+      expect(computeAvailableSlots({ ...base, date, baseTimes: ['09:00'], blocks: [block] })).toEqual([]);
+    }
   });
 
   it('returns nothing for a past date', () => {
@@ -58,16 +98,24 @@ describe('computeAvailableSlots', () => {
       .toEqual(['08:50', '10:00', '11:30', '12:45']);
   });
 
-  it('hides candidates within 45 minutes of a taken time on either side', () => {
+  it('hides candidates within one appointment of a taken time on either side', () => {
+    const free = oneAppointmentAfter('18:00');
     expect(computeAvailableSlots({
-      ...base, date: DATE, baseTimes: ['17:30', '18:00', '18:15', '18:45'], takenTimes: ['18:00'],
-    })).toEqual(['18:45']); // 17:30 and 18:15 are both < 45 min from 18:00
+      ...base, date: DATE, baseTimes: ['17:30', '18:00', '18:15', free], takenTimes: ['18:00'],
+    })).toEqual([free]); // 17:30 and 18:15 both sit inside 18:00's window
   });
 
-  it('keeps a candidate exactly 45 minutes away from a taken time (strict <)', () => {
+  it('keeps a candidate exactly one appointment away from a taken time (strict <)', () => {
+    const free = oneAppointmentAfter('18:00');
     expect(computeAvailableSlots({
-      ...base, date: DATE, baseTimes: ['18:00', '18:45'], takenTimes: ['18:00'],
-    })).toEqual(['18:45']);
+      ...base, date: DATE, baseTimes: ['18:00', free], takenTimes: ['18:00'],
+    })).toEqual([free]);
+  });
+
+  it('hides a candidate one minute inside a taken time’s window', () => {
+    expect(computeAvailableSlots({
+      ...base, date: DATE, baseTimes: ['18:00', justInsideWindow('18:00')], takenTimes: ['18:00'],
+    })).toEqual([]);
   });
 
   it('hides a shifted extra slot too close to a taken base time', () => {
