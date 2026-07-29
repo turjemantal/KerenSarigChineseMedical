@@ -3,6 +3,7 @@ import { GoogleCalendarService } from '../src/integrations/google-calendar/googl
 import { AppointmentDocument } from '../src/appointments/appointment.schema';
 import { AppointmentStatus } from '../src/common/enums/appointment-status.enum';
 import { CALENDAR_EVENT_SUMMARY, CALENDAR_EVENT_SUMMARY_PENDING } from '../src/common/constants/defaults.constants';
+import { APPOINTMENT_DURATION_MINUTES } from '../src/common/constants/schedule.constants';
 
 // mock @googleapis/calendar so no real HTTP calls are made.
 // The fns are defined inside the factory (jest.mock is hoisted above const declarations)
@@ -81,12 +82,15 @@ describe('GoogleCalendarService', () => {
       expect(requestBody.start.dateTime).toContain('09:00');
     });
 
-    it('end time is CALENDAR_EVENT_DURATION_MINUTES after the start', async () => {
+    // The event lasts exactly one appointment — derived from the constant, never a
+    // hardcoded clock time, so the event can't silently drift from the booking rules.
+    it('end time is APPOINTMENT_DURATION_MINUTES after the start', async () => {
       mockEventsInsert.mockResolvedValueOnce({ data: { id: 'evt-1' } });
       await service.createEvent(makeAppt({ time: '09:00' }));
       const { requestBody } = mockEventsInsert.mock.calls[0][0];
-      // 09:00 + 50 min = 09:50
-      expect(requestBody.end.dateTime).toContain('09:50');
+      const end = 9 * 60 + APPOINTMENT_DURATION_MINUTES;
+      const expected = `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+      expect(requestBody.end.dateTime).toContain(expected);
     });
 
     it('uses the normal summary for a scheduled appointment', async () => {

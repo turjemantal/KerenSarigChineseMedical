@@ -1,19 +1,6 @@
 import { useState, useEffect } from 'react'
 import { MS_PER_DAY, UI_ERRORS, parseAvailability } from '../constants'
-
-// Fetch the live booking horizon (days ahead) from the DB-backed public endpoint; on
-// failure, fail-closed (0) rather than baking in a number — the server is the single
-// source of truth (it never returns out-of-horizon availability anyway).
-async function fetchBookingHorizon(): Promise<number> {
-  try {
-    const res = await fetch('/api/clinic-settings/public')
-    if (res.ok) {
-      const body = await res.json()
-      if (typeof body?.bookingAheadDays === 'number') return body.bookingAheadDays
-    }
-  } catch { /* fall through to fail-closed */ }
-  return 0
-}
+import { fetchBookingHorizon } from '../utils/publicSettings'
 
 // Compact in-card picker for choosing a new appointment slot. Shared by the client
 // portal (client reschedules own appointment) and the admin dashboard (admin moves any
