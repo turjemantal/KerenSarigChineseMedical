@@ -1,5 +1,7 @@
 // Centralized error messages — keep all user-facing error text here, never inline.
 
+import { APPOINTMENT_DURATION_MINUTES } from './schedule.constants';
+
 export enum Entity {
   Appointment = 'Appointment',
   Lead = 'Lead',
@@ -56,8 +58,8 @@ export const ERRORS = {
   TIME_IN_PAST: 'לא ניתן לקבוע תור לשעה שכבר עברה',
   CLOSED_WEEKDAY: 'הקליניקה סגורה ביום זה',
   EXTRA_SLOT_EXISTS: 'השעה כבר פתוחה או תפוסה בתאריך זה',
-  EXTRA_SLOT_OVERLAPS: 'לא ניתן לפתוח שעה נוספת קרובה מדי לשעה קיימת (נדרש הפרש של 45 דקות לפחות)',
-  SCHEDULE_TIMES_TOO_CLOSE: 'שעות ביום חייבות להיות מרוחקות לפחות 45 דקות זו מזו',
+  EXTRA_SLOT_OVERLAPS: `לא ניתן לפתוח שעה נוספת קרובה מדי לשעה קיימת (נדרש הפרש של ${APPOINTMENT_DURATION_MINUTES} דקות לפחות)`,
+  SCHEDULE_TIMES_TOO_CLOSE: `שעות ביום חייבות להיות מרוחקות לפחות ${APPOINTMENT_DURATION_MINUTES} דקות זו מזו`,
   CLIENT_ALREADY_EXISTS: 'לקוח עם מספר טלפון זה כבר קיים',
   CANNOT_RESCHEDULE_STATUS: 'לא ניתן לשנות מועד עבור תור במצב זה',
   CANNOT_REJECT_STATUS: 'ניתן לדחות רק בקשת תור שממתינה לאישור',

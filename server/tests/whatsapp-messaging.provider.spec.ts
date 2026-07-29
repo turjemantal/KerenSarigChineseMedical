@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WhatsappMessagingProvider } from '../src/integrations/whatsapp/whatsapp-messaging.provider';
 import { WhatsappService } from '../src/integrations/whatsapp/whatsapp.service';
+import { CLINIC_ADDRESS } from '../src/common/constants/defaults.constants';
 
 const mockWhatsapp = { sendTemplate: jest.fn().mockResolvedValue(undefined) };
 
@@ -96,12 +97,12 @@ describe('WhatsappMessagingProvider', () => {
   });
 
   describe('sendAppointmentReminder', () => {
-    it('sends the time as a template parameter', async () => {
+    it('sends the time and the clinic address as template parameters', async () => {
       await provider.sendAppointmentReminder('0501234567', '14:30');
       expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
         '0501234567',
         'appointment_reminder',
-        ['14:30'],
+        ['14:30', CLINIC_ADDRESS],
       );
     });
   });

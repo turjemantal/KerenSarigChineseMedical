@@ -5,10 +5,10 @@ import { config } from '../../config';
 import {
   CLINIC_ADDRESS,
   CLINIC_TIMEZONE,
-  CALENDAR_EVENT_DURATION_MINUTES,
   CALENDAR_EVENT_SUMMARY,
   CALENDAR_EVENT_SUMMARY_PENDING,
 } from '../../common/constants/defaults.constants';
+import { APPOINTMENT_DURATION_MINUTES } from '../../common/constants/schedule.constants';
 import { AppointmentStatus } from '../../common/enums/appointment-status.enum';
 
 @Injectable()
@@ -56,7 +56,7 @@ export class GoogleCalendarService {
         timeZone: CLINIC_TIMEZONE,
       },
       end: {
-        dateTime: this.addMinutes(appt.date, appt.time, CALENDAR_EVENT_DURATION_MINUTES),
+        dateTime: this.addMinutes(appt.date, appt.time, APPOINTMENT_DURATION_MINUTES),
         timeZone: CLINIC_TIMEZONE,
       },
     };

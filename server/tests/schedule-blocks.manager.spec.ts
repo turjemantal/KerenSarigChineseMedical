@@ -6,6 +6,7 @@ import { ExtraSlotsService } from '../src/schedule-blocks/extra-slots.service';
 import { WeeklyScheduleManager } from '../src/weekly-schedule/weekly-schedule.manager';
 import { Weekday } from '../src/common/enums/weekday.enum';
 import { createScheduleBlockSchema } from '../src/schedule-blocks/dto/validations/schedule-block.schemas';
+import { oneAppointmentAfter, justInsideWindow } from './helpers/time';
 
 const dayBlock = { _id: 'b1', startDate: '2026-07-01', endDate: '2026-07-01', reason: 'השתלמות' };
 const hoursBlock = { _id: 'b2', startDate: '2026-07-02', endDate: '2026-07-02', startTime: '09:00', endTime: '13:00', reason: 'סידורים' };
@@ -138,12 +139,20 @@ describe('ScheduleBlocksManager', () => {
       expect(mockExtraSlots.create).not.toHaveBeenCalled();
     });
 
-    it('accepts a properly spaced extra slot', async () => {
+    it('accepts an extra slot exactly one appointment after a base time', async () => {
+      const spaced = oneAppointmentAfter('18:00');
       mockWeeklySchedule.getSchedule.mockResolvedValueOnce({ ...emptySchedule, [Weekday.WEDNESDAY]: ['18:00'] });
       mockExtraSlots.findByDate.mockResolvedValueOnce([]);
-      mockExtraSlots.create.mockResolvedValueOnce({ _id: 'e2', date: '2026-07-01', time: '18:45' });
-      await manager.addExtraSlot('2026-07-01', '18:45');
-      expect(mockExtraSlots.create).toHaveBeenCalledWith('2026-07-01', '18:45');
+      mockExtraSlots.create.mockResolvedValueOnce({ _id: 'e2', date: '2026-07-01', time: spaced });
+      await manager.addExtraSlot('2026-07-01', spaced);
+      expect(mockExtraSlots.create).toHaveBeenCalledWith('2026-07-01', spaced);
+    });
+
+    it('rejects an extra slot one minute inside a base time’s window', async () => {
+      mockWeeklySchedule.getSchedule.mockResolvedValueOnce({ ...emptySchedule, [Weekday.WEDNESDAY]: ['18:00'] });
+      mockExtraSlots.findByDate.mockResolvedValueOnce([]);
+      await expect(manager.addExtraSlot('2026-07-01', justInsideWindow('18:00'))).rejects.toThrow(BadRequestException);
+      expect(mockExtraSlots.create).not.toHaveBeenCalled();
     });
   });
 });

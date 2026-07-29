@@ -59,6 +59,10 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   [LeadStatus.Closed]: 'סגור',
 }
 
+// MUST equal the server's APPOINTMENT_DURATION_MINUTES (schedule.constants.ts) — the
+// server spaces slots, closes blocks and sizes calendar events by it, and this copy
+// drives what the client is told and how long an appointment is drawn in the calendar.
+// A drift here means the UI promises a length the booking rules don't actually protect.
 export const APPOINTMENT_DURATION_MINUTES = 50
 
 // mirrors server schedule.constants.ts — free reschedule/cancel window (hours before

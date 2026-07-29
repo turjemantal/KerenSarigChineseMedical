@@ -14,6 +14,7 @@ import {
   UI_ERRORS,
 } from '../constants'
 import type { ScheduleBlock, ExtraSlot } from '../constants'
+import { calendarHourRange, visibleDayCount, DAYS_IN_WEEK } from '../utils/calendarViewport'
 
 // ---------- Types ----------
 interface Lead {
@@ -154,11 +155,11 @@ function todayStr() {
   return localDateStr(new Date())
 }
 
-function getMondayOfWeek(date: Date): Date {
+// The clinic week starts on Sunday (Israeli week) — anchoring it to Monday used to push
+// Sunday out of the 5-column grid entirely, hiding every booking made on it.
+function getSundayOfWeek(date: Date): Date {
   const d = new Date(date)
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff)
+  d.setDate(d.getDate() - d.getDay())
   d.setHours(0, 0, 0, 0)
   return d
 }
@@ -623,35 +624,58 @@ function Chevron({ dir, s = 12 }: { dir: 'prev' | 'next'; s?: number }) {
   )
 }
 
-function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtraChange }: { appointments: Appointment[]; blocks: ScheduleBlock[]; extraSlots: ExtraSlot[]; onBlocksChange: () => void; onExtraChange: () => void }) {
-  const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(new Date()))
+function CalendarView({ appointments, blocks, extraSlots, schedule, onBlocksChange, onExtraChange }: { appointments: Appointment[]; blocks: ScheduleBlock[]; extraSlots: ExtraSlot[]; schedule: WeekSchedule | null; onBlocksChange: () => void; onExtraChange: () => void }) {
+  const [weekStart, setWeekStart] = useState(() => getSundayOfWeek(new Date()))
   const [mobileDay, setMobileDay] = useState(() => new Date())
   const [mobileView, setMobileView] = useState<'day' | 'week' | 'month'>('day')
   const [now, setNow] = useState(new Date())
   const [blocksOpen, setBlocksOpen] = useState(false)
-  const WORK_DAYS = 5
   const HOUR_H = 60
-  const START_HOUR = 8
-  const END_HOUR = 20
-  const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
-  const weekDays = Array.from({ length: WORK_DAYS }, (_, i) => addDays(weekStart, i))
-  const weekEnd = addDays(weekStart, WORK_DAYS)
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000)
     return () => clearInterval(id)
   }, [])
 
-  const weekAppts = appointments.filter(a => {
+  const liveAppts = appointments.filter(a => a.status !== AppointmentStatus.Cancelled)
+  const baseTimesOn = (d: Date) => schedule?.[d.getDay()] ?? []
+  // A day is "in play" when the weekly board opens hours on it, an extra slot was opened,
+  // or an appointment sits on it. Blocks are deliberately excluded — a closed day holds no
+  // bookings, so counting it would only add empty columns during a vacation.
+  const dayHasContent = (d: Date) => {
+    const ds = formatDate(d)
+    return baseTimesOn(d).length > 0 || liveAppts.some(a => a.date === ds) || extraSlots.some(e => e.date === ds)
+  }
+
+  // The grid is derived from the data, never fixed: it renders every day the clinic
+  // actually uses (Sun–Thu at minimum) and spans every hour those days actually hold,
+  // so a newly opened weekday or an unusually early/late slot can never fall off-grid.
+  const fullWeek = Array.from({ length: DAYS_IN_WEEK }, (_, i) => addDays(weekStart, i))
+  const workDays = visibleDayCount(fullWeek.map(dayHasContent))
+  const weekDays = fullWeek.slice(0, workDays)
+  const weekEnd = addDays(weekStart, workDays)
+
+  const weekAppts = liveAppts.filter(a => {
     const d = new Date(a.date + 'T00:00:00')
-    return d >= weekStart && d < weekEnd && a.status !== AppointmentStatus.Cancelled
+    return d >= weekStart && d < weekEnd
   })
+  const weekDayStrs = weekDays.map(formatDate)
+  const weekBlocks = blocks.filter(b => weekDayStrs.some(ds => dateInBlock(ds, b)))
+  const { startHour: START_HOUR, endHour: END_HOUR } = calendarHourRange(
+    [
+      ...weekDays.flatMap(baseTimesOn),
+      ...extraSlots.filter(e => weekDayStrs.includes(e.date)).map(e => e.time),
+      ...weekAppts.map(a => a.time),
+    ],
+    weekBlocks.flatMap(b => [b.startTime, b.endTime].filter((t): t is string => !!t)),
+  )
+  const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
 
-  const prevWeek = () => setWeekStart(d => addDays(d, -7))
-  const nextWeek = () => setWeekStart(d => addDays(d, 7))
-  const goToday = () => setWeekStart(getMondayOfWeek(new Date()))
+  const prevWeek = () => setWeekStart(d => addDays(d, -DAYS_IN_WEEK))
+  const nextWeek = () => setWeekStart(d => addDays(d, DAYS_IN_WEEK))
+  const goToday = () => setWeekStart(getSundayOfWeek(new Date()))
 
-  const weekLabel = `${hebFullDate(weekStart)} – ${hebFullDate(addDays(weekStart, WORK_DAYS - 1))}`
+  const weekLabel = `${hebFullDate(weekStart)} – ${hebFullDate(addDays(weekStart, workDays - 1))}`
   const todayDateStr = todayStr()
   const nowDecimal = now.getHours() + now.getMinutes() / 60
   const showNowLine = nowDecimal >= START_HOUR && nowDecimal < END_HOUR
@@ -661,16 +685,18 @@ function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtr
 
   // mobile day agenda
   const mobileDateStr = formatDate(mobileDay)
-  const mobileDayAppts = appointments
-    .filter(a => a.date === mobileDateStr && a.status !== AppointmentStatus.Cancelled)
+  const mobileDayAppts = liveAppts
+    .filter(a => a.date === mobileDateStr)
     .sort((a, b) => a.time.localeCompare(b.time))
   const mobileDayBlocks = blocks.filter(b => dateInBlock(mobileDateStr, b))
   const mobileDayClosed = mobileDayBlocks.some(b => !b.startTime)
-  const apptsOn = (ds: string) => appointments.filter(a => a.date === ds && a.status !== AppointmentStatus.Cancelled)
+  const apptsOn = (ds: string) => liveAppts.filter(a => a.date === ds)
 
-  // mobile week (the work week containing mobileDay)
-  const mobileWeekStart = getMondayOfWeek(mobileDay)
-  const mobileWeekDays = Array.from({ length: WORK_DAYS }, (_, i) => addDays(mobileWeekStart, i))
+  // mobile week (the work week containing mobileDay) — same data-driven day set as desktop
+  const mobileWeekStart = getSundayOfWeek(mobileDay)
+  const mobileFullWeek = Array.from({ length: DAYS_IN_WEEK }, (_, i) => addDays(mobileWeekStart, i))
+  const mobileWorkDays = visibleDayCount(mobileFullWeek.map(dayHasContent))
+  const mobileWeekDays = mobileFullWeek.slice(0, mobileWorkDays)
 
   // mobile month grid (the month of mobileDay)
   const mMonthFirst = new Date(mobileDay.getFullYear(), mobileDay.getMonth(), 1)
@@ -690,7 +716,7 @@ function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtr
   const mobileNavLabel = mobileView === 'day'
     ? `${hebDateLabel(mobileDay)} · ${hebFullDate(mobileDay)}`
     : mobileView === 'week'
-      ? `${hebFullDate(mobileWeekStart)} – ${hebFullDate(addDays(mobileWeekStart, WORK_DAYS - 1))}`
+      ? `${hebFullDate(mobileWeekStart)} – ${hebFullDate(addDays(mobileWeekStart, mobileWorkDays - 1))}`
       : `${HEB_MONTH_NAMES[mobileDay.getMonth()]} ${mobileDay.getFullYear()}`
 
   return (
@@ -842,7 +868,7 @@ function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtr
         <div className="overflow-x-auto">
           <div style={{ minWidth: 700 }}>
             {/* Day headers */}
-            <div className="grid" style={{ gridTemplateColumns: `64px repeat(${WORK_DAYS}, 1fr)`, background: '#F5F1EA', borderBottom: '2px solid rgba(28,42,36,0.1)' }}>
+            <div className="grid" style={{ gridTemplateColumns: `64px repeat(${workDays}, 1fr)`, background: '#F5F1EA', borderBottom: '2px solid rgba(28,42,36,0.1)' }}>
               <div />
               {weekDays.map(d => {
                 const ds = formatDate(d)
@@ -861,7 +887,7 @@ function CalendarView({ appointments, blocks, extraSlots, onBlocksChange, onExtr
               })}
             </div>
             {/* Grid body */}
-            <div className="relative grid" style={{ gridTemplateColumns: `64px repeat(${WORK_DAYS}, 1fr)` }}>
+            <div className="relative grid" style={{ gridTemplateColumns: `64px repeat(${workDays}, 1fr)` }}>
               {/* Hour labels */}
               <div>
                 {hours.map(h => (
@@ -1923,7 +1949,7 @@ export default function Dashboard({ onExit }: { onExit: () => void }) {
         <div className="flex-1 overflow-auto">
           {view === 'today'        && <TodayView appointments={appointments} leads={leads} onStatusChange={refreshAppts} />}
           {view === 'leads'        && <LeadsView leads={leads} onSelect={setSelectedLead} />}
-          {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} extraSlots={extraSlots} onBlocksChange={refreshBlocks} onExtraChange={refreshExtraSlots} />}
+          {view === 'calendar'     && <CalendarView appointments={appointments} blocks={blocks} extraSlots={extraSlots} schedule={schedule} onBlocksChange={refreshBlocks} onExtraChange={refreshExtraSlots} />}
           {view === 'appointments' && <AppointmentsView appointments={appointments} clients={clients} onStatusChange={() => { refreshAppts(); refreshClients() }} />}
           {view === 'patients'     && <PatientsView appointments={appointments} clients={clients} onClientAdded={refreshClients} />}
           {view === 'schedule'     && <WeeklyScheduleView schedule={schedule} onChange={refreshSchedule} />}
