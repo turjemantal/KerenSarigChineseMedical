@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SmsMessagingProvider } from '../src/integrations/sms/sms-messaging.provider';
 import { SmsService } from '../src/integrations/sms/sms.service';
+import { CLINIC_ADDRESS } from '../src/common/constants/defaults.constants';
 
 const mockSms = { sendSms: jest.fn().mockResolvedValue(undefined) };
 
@@ -130,6 +131,15 @@ describe('SmsMessagingProvider', () => {
       expect(mockSms.sendSms).toHaveBeenCalledWith(
         '0501234567',
         expect.stringContaining('14:30'),
+      );
+    });
+
+    // Keren asked for the clinic address in the reminder so clients know where to come.
+    it('includes the clinic address', async () => {
+      await provider.sendAppointmentReminder('0501234567', '14:30');
+      expect(mockSms.sendSms).toHaveBeenCalledWith(
+        '0501234567',
+        expect.stringContaining(CLINIC_ADDRESS),
       );
     });
   });

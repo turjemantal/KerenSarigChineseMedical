@@ -1,5 +1,5 @@
 import { formatHebrewDate } from '../utils/date.utils';
-import { CLINIC_NAME } from './defaults.constants';
+import { CLINIC_ADDRESS, CLINIC_NAME } from './defaults.constants';
 import { OTP_EXPIRY_MINUTES } from './otp.constants';
 
 // ─── WhatsApp template parameter builders ────────────────────────────────────
@@ -16,8 +16,8 @@ export const bookingRequestParams = bookingParams;
 // booking_rejected template: {{1}} = first name, {{2}} = date, {{3}} = time
 export const bookingRejectedParams = bookingParams;
 
-// appointment_reminder template: {{1}} = time
-export const reminderParams = (time: string): string[] => [time];
+// appointment_reminder template: {{1}} = time, {{2}} = clinic address
+export const reminderParams = (time: string): string[] => [time, CLINIC_ADDRESS];
 
 // ─── SMS plain-text message builders ─────────────────────────────────────────
 // The `\n\n@domain #code` footer enables Web OTP API autofill (Chrome Android,
@@ -39,7 +39,7 @@ export const smsBookingRequestText = (name: string, date: string, time: string):
   `שלום ${name.split(' ')[0]}, בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time} התקבלה וממתינה לאישור. נעדכן ברגע שהתור יאושר. ${CLINIC_NAME}`;
 
 export const smsReminderText = (time: string): string =>
-  `תזכורת: יש לך תור מחר בשעה ${time}. ${CLINIC_NAME}`;
+  `תזכורת: יש לך תור מחר בשעה ${time}, בכתובת ${CLINIC_ADDRESS}. ${CLINIC_NAME}`;
 
 export const smsBookingRejectedText = (name: string, date: string, time: string): string =>
   `שלום ${name.split(' ')[0]}, לצערנו לא נוכל לקבל את בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time}. נשמח לעזור במועד אחר — ניתן לקבוע מחדש או ליצור קשר. ${CLINIC_NAME}`;
