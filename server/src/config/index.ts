@@ -96,6 +96,14 @@ export const config = {
       get bookingRejected(): string {
         return process.env.WHATSAPP_TEMPLATE_BOOKING_REJECTED ?? '';
       },
+      // a cancellation has no sensible fallback — empty until a dedicated template is approved
+      get bookingCancelled(): string {
+        return process.env.WHATSAPP_TEMPLATE_BOOKING_CANCELLED ?? '';
+      },
+      // likewise for the admin-facing cancellation alert
+      get cancellationAlert(): string {
+        return process.env.WHATSAPP_TEMPLATE_CANCELLATION_ALERT ?? '';
+      },
       get newBookingAlert(): string {
         return process.env.WHATSAPP_TEMPLATE_NEW_BOOKING_ALERT || process.env.WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION!;
       },

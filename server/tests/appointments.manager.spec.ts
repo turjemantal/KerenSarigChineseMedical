@@ -41,8 +41,10 @@ const mockMessaging = {
   sendBookingRequestReceived: jest.fn().mockResolvedValue(true),
   sendBookingConfirmation: jest.fn().mockResolvedValue(true),
   sendBookingRejected: jest.fn().mockResolvedValue(true),
+  sendBookingCancelled: jest.fn().mockResolvedValue(true),
   sendAppointmentReminder: jest.fn().mockResolvedValue(true),
   sendNewBookingAlert: jest.fn().mockResolvedValue(true),
+  sendCancellationAlert: jest.fn().mockResolvedValue(true),
 };
 
 const mockCalendar = {
@@ -293,6 +295,55 @@ describe('AppointmentsManager', () => {
       await expect(manager.cancelOwn('a1', '0509999999')).rejects.toThrow(ForbiddenException);
       expect(mockService.update).not.toHaveBeenCalled();
     });
+
+    it('tells the client their appointment was cancelled', async () => {
+      const cancelled = { ...appt1, status: AppointmentStatus.CANCELLED };
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockService.update.mockResolvedValueOnce(cancelled);
+      await manager.cancelOwn('a1', '0501111111');
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingCancelled).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
+    });
+
+    it('alerts the admin phone when a client cancels', async () => {
+      process.env.ADMIN_PHONE = '0509999999';
+      const cancelled = { ...appt1, status: AppointmentStatus.CANCELLED };
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockService.update.mockResolvedValueOnce(cancelled);
+      await manager.cancelOwn('a1', '0501111111');
+      await flushVoidPromises();
+      expect(mockMessaging.sendCancellationAlert).toHaveBeenCalledWith('0509999999', appt1.name, appt1.date, appt1.time);
+      delete process.env.ADMIN_PHONE;
+    });
+
+    it('skips the admin cancellation alert when ADMIN_PHONE is not set', async () => {
+      delete process.env.ADMIN_PHONE;
+      const cancelled = { ...appt1, status: AppointmentStatus.CANCELLED };
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockService.findById.mockResolvedValueOnce(appt1);
+      mockService.update.mockResolvedValueOnce(cancelled);
+      await manager.cancelOwn('a1', '0501111111');
+      await flushVoidPromises();
+      expect(mockMessaging.sendCancellationAlert).not.toHaveBeenCalled();
+      // the client is still told, regardless of the admin alert
+      expect(mockMessaging.sendBookingCancelled).toHaveBeenCalled();
+    });
+
+    // Keren's dashboard cancels via PATCH /:id, not the client-only /cancel route —
+    // both land in update(), so both must notify.
+    it('notifies when Keren cancels a scheduled appointment via update()', async () => {
+      const scheduled = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      process.env.ADMIN_PHONE = '0509999999';
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockService.update.mockResolvedValueOnce({ ...scheduled, status: AppointmentStatus.CANCELLED });
+      await manager.update('a1', { status: AppointmentStatus.CANCELLED });
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingCancelled).toHaveBeenCalledWith(appt1.phone, appt1.name, appt1.date, appt1.time);
+      expect(mockMessaging.sendCancellationAlert).toHaveBeenCalledWith('0509999999', appt1.name, appt1.date, appt1.time);
+      delete process.env.ADMIN_PHONE;
+    });
   });
 
   describe('rescheduleOwn', () => {
@@ -308,6 +359,52 @@ describe('AppointmentsManager', () => {
       expect(result.status).toBe(AppointmentStatus.SCHEDULED);
       await flushVoidPromises();
       expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalled();
+    });
+
+    it('sends the old-slot cancellation before the new-slot confirmation', async () => {
+      const order: string[] = [];
+      // the cancellation is deliberately slow: if the two sends were dispatched in
+      // parallel, the confirmation would land first and this assertion would fail
+      mockMessaging.sendBookingCancelled.mockImplementationOnce(
+        () => new Promise(res => setTimeout(() => { order.push('cancelled'); res(true); }, 20)),
+      );
+      mockMessaging.sendBookingConfirmation.mockImplementationOnce(async () => { order.push('confirmed'); return true; });
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...scheduled, time: '21:00' });
+      await manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00');
+      await new Promise(r => setTimeout(r, 50));
+      // the cancellation names the OLD slot, the confirmation the NEW one
+      expect(mockMessaging.sendBookingCancelled).toHaveBeenCalledWith(scheduled.phone, scheduled.name, scheduled.date, scheduled.time);
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(scheduled.phone, scheduled.name, FUTURE_DATE, '21:00');
+      expect(order).toEqual(['cancelled', 'confirmed']);
+    });
+
+    // a still-pending request was never confirmed, so there is nothing to announce as
+    // cancelled — and it must not be described as approved either
+    it('sends only the request-received text when a PENDING request is moved', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...pending, time: '21:00' });
+      await manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00');
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingRequestReceived).toHaveBeenCalledWith(pending.phone, pending.name, pending.date, '21:00');
+      expect(mockMessaging.sendBookingConfirmation).not.toHaveBeenCalled();
+      expect(mockMessaging.sendBookingCancelled).not.toHaveBeenCalled();
+    });
+
+    // reschedule goes through service.update directly, so update()'s cancelled branch
+    // must not also fire — the client would get a bogus admin alert and a stray message
+    it('does not trigger the cancellation admin alert', async () => {
+      process.env.ADMIN_PHONE = '0509999999';
+      mockService.findById.mockResolvedValueOnce(scheduled);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...scheduled, time: '21:00' });
+      await manager.rescheduleOwn('a1', '0501111111', FUTURE_DATE, '21:00');
+      await flushVoidPromises();
+      expect(mockMessaging.sendCancellationAlert).not.toHaveBeenCalled();
+      delete process.env.ADMIN_PHONE;
     });
 
     it('forbids rescheduling someone else’s appointment', async () => {
@@ -387,6 +484,30 @@ describe('AppointmentsManager', () => {
       mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
       mockService.update.mockRejectedValueOnce(Object.assign(new Error('E11000 duplicate key'), { code: 11000 }));
       await expect(manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00')).rejects.toThrow(ERRORS.SLOT_NOT_AVAILABLE);
+    });
+
+    it('sends both messages when Keren moves a confirmed appointment', async () => {
+      const scheduledAppt = { ...appt1, status: AppointmentStatus.SCHEDULED };
+      mockService.findById.mockResolvedValueOnce(scheduledAppt);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...scheduledAppt, time: '21:00' });
+      await manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00');
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingCancelled).toHaveBeenCalledWith(scheduledAppt.phone, scheduledAppt.name, scheduledAppt.date, scheduledAppt.time);
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalledWith(scheduledAppt.phone, scheduledAppt.name, FUTURE_DATE, '21:00');
+    });
+
+    // promoting pending → scheduled confirms a time; nothing was ever confirmed before,
+    // so announcing a cancellation would invent an appointment the client never had
+    it('does not announce a cancellation when promoting a pending request', async () => {
+      const pending = { ...appt1, status: AppointmentStatus.PENDING };
+      mockService.findById.mockResolvedValueOnce(pending);
+      mockAvailability({ extras: [{ date: FUTURE_DATE, time: '21:00' }] });
+      mockService.update.mockResolvedValueOnce({ ...pending, time: '21:00', status: AppointmentStatus.SCHEDULED });
+      await manager.rescheduleByAdmin('a1', FUTURE_DATE, '21:00');
+      await flushVoidPromises();
+      expect(mockMessaging.sendBookingConfirmation).toHaveBeenCalled();
+      expect(mockMessaging.sendBookingCancelled).not.toHaveBeenCalled();
     });
 
     it('auto-approves a still-pending request on admin reschedule (→ scheduled + confirmation)', async () => {
