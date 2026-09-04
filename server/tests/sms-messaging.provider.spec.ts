@@ -144,6 +144,30 @@ describe('SmsMessagingProvider', () => {
     });
   });
 
+  describe('sendBookingCancelled', () => {
+    it('tells the client the appointment was cancelled, with the Hebrew date and time', async () => {
+      await provider.sendBookingCancelled('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(mockSms.sendSms.mock.calls[0][0]).toBe('0501234567');
+      expect(text).toContain('Alice');       // first name only
+      expect(text).toContain('1 במאי 2026');
+      expect(text).toContain('09:00');
+      expect(text).toContain('בוטל');
+    });
+  });
+
+  describe('sendCancellationAlert', () => {
+    it('sends an admin alert naming the client and the freed slot', async () => {
+      await provider.sendCancellationAlert('0509999999', 'Alice Smith', '2026-05-01', '09:00');
+      const text: string = mockSms.sendSms.mock.calls[0][1];
+      expect(mockSms.sendSms.mock.calls[0][0]).toBe('0509999999');
+      expect(text).toContain('תור בוטל');
+      expect(text).toContain('Alice Smith'); // admin sees the full name
+      expect(text).toContain('1 במאי 2026');
+      expect(text).toContain('09:00');
+    });
+  });
+
   describe('sendNewLeadAlert', () => {
     it('sends an admin alert with the lead name, phone, and concern', async () => {
       await provider.sendNewLeadAlert('0509999999', 'Alice Smith', '0501234567', 'כאב גב');

@@ -90,4 +90,42 @@ describe('envSchema — 019sms credentials', () => {
     });
     expect(error).toBeUndefined();
   });
+
+  // The cancellation templates are optional — a prod deploy must not fail just because
+  // no dedicated WhatsApp template has been approved yet (the SMS path needs none).
+  it('does not require the cancellation templates', () => {
+    const { error } = envSchema.validate({
+      APP_ENV: AppEnv.Prod,
+      CLIENT_URL: 'https://example.com',
+      JWT_SECRET: 'secret',
+      ADMIN_PASSWORD: 'password',
+      MESSAGING_PROVIDER: MessagingProvider.Whatsapp,
+      WHATSAPP_ACCESS_TOKEN: 'token',
+      WHATSAPP_PHONE_NUMBER_ID: '123',
+      WHATSAPP_TEMPLATE_LANGUAGE: 'he',
+      WHATSAPP_TEMPLATE_OTP: 'otp_code',
+      WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION: 'booking_confirmation',
+      WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER: 'appointment_reminder',
+    });
+    expect(error).toBeUndefined();
+  });
+
+  it('accepts the cancellation templates when they are configured', () => {
+    const { error } = envSchema.validate({
+      APP_ENV: AppEnv.Prod,
+      CLIENT_URL: 'https://example.com',
+      JWT_SECRET: 'secret',
+      ADMIN_PASSWORD: 'password',
+      MESSAGING_PROVIDER: MessagingProvider.Whatsapp,
+      WHATSAPP_ACCESS_TOKEN: 'token',
+      WHATSAPP_PHONE_NUMBER_ID: '123',
+      WHATSAPP_TEMPLATE_LANGUAGE: 'he',
+      WHATSAPP_TEMPLATE_OTP: 'otp_code',
+      WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION: 'booking_confirmation',
+      WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER: 'appointment_reminder',
+      WHATSAPP_TEMPLATE_BOOKING_CANCELLED: 'booking_cancelled',
+      WHATSAPP_TEMPLATE_CANCELLATION_ALERT: 'cancellation_alert',
+    });
+    expect(error).toBeUndefined();
+  });
 });

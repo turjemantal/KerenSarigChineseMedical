@@ -114,11 +114,33 @@ export class AppointmentsManager {
 
   // fire-and-forget messaging, but log the real outcome tied to the appointment id
   private notify(kind: string, apptId: string, p: Promise<boolean>): void {
-    p.then((ok) =>
-      ok
-        ? this.logger.log(`[Appointment] sms=${kind} sent appt=${apptId}`)
-        : this.logger.warn(`[Appointment] sms=${kind} not sent appt=${apptId}`),
-    ).catch((e) => this.logger.error(`[Appointment] sms=${kind} FAILED appt=${apptId}: ${e}`));
+    void this.notifyAwaited(kind, apptId, p);
+  }
+
+  // Same fire-and-forget contract as notify(), but the sends are chained so they reach
+  // the client in the order given. Used where the order carries meaning — a reschedule
+  // must read "old slot cancelled" *then* "new slot confirmed"; arriving the other way
+  // round would tell the client their new appointment is off. Each send is started only
+  // after the previous one settles, so a slow provider can't reorder them.
+  private notifyInOrder(apptId: string, sends: { kind: string; send: () => Promise<boolean> }[]): void {
+    void sends.reduce(
+      (prev, { kind, send }) => prev.then(() => this.notifyAwaited(kind, apptId, send())),
+      Promise.resolve(),
+    );
+  }
+
+  // The shared logging body. Never rejects — one failed message must neither surface to
+  // the caller nor stop the next message in an ordered sequence from going out.
+  private async notifyAwaited(kind: string, apptId: string, p: Promise<boolean>): Promise<void> {
+    try {
+      if (await p) {
+        this.logger.log(`[Appointment] sms=${kind} sent appt=${apptId}`);
+      } else {
+        this.logger.warn(`[Appointment] sms=${kind} not sent appt=${apptId}`);
+      }
+    } catch (e) {
+      this.logger.error(`[Appointment] sms=${kind} FAILED appt=${apptId}: ${e}`);
+    }
   }
 
   // fire-and-forget calendar sync — errors are logged but never surface to the caller
@@ -236,6 +258,11 @@ export class AppointmentsManager {
       (existing.status === AppointmentStatus.PENDING || existing.status === AppointmentStatus.SCHEDULED) &&
       updated.status === AppointmentStatus.CANCELLED;
     if (cancelled) {
+      this.logger.log(`[Appointment] cancelled appt=${id} phone=${maskPhone(updated.phone)}`);
+      this.notify('cancelled', id, this.messaging.sendBookingCancelled(updated.phone, updated.name, updated.date, updated.time));
+      if (config.adminPhone) {
+        this.notify('cancellation-alert', id, this.messaging.sendCancellationAlert(config.adminPhone, updated.name, updated.date, updated.time));
+      }
       this.syncCalendarDelete(id, existing.googleCalendarEventId);
     }
     return updated;
@@ -299,9 +326,34 @@ export class AppointmentsManager {
     this.logger.log(
       `[Appointment] rescheduled appt=${id} phone=${maskPhone(updated.phone)} → ${updated.date} ${updated.time} status=${updated.status}`,
     );
-    this.notify('reschedule', id, this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time));
+    this.notifyReschedule(id, appt, updated);
     this.syncCalendarUpdate(id, appt.googleCalendarEventId, updated);
     return updated;
+  }
+
+  // Which messages a reschedule sends depends on what the appointment *was*, not on who
+  // moved it:
+  //   • confirmed → confirmed: the old slot is genuinely gone, so the client gets the
+  //     cancellation for it and then the confirmation for the new one, in that order.
+  //   • pending → confirmed (admin picked a time, which approves it): nothing was ever
+  //     confirmed, so there is no cancellation to announce — just the confirmation.
+  //   • pending → pending (client moved their own request): still awaiting approval, so
+  //     send the request-received text. Sending a confirmation here would tell the client
+  //     the appointment was approved when it wasn't.
+  private notifyReschedule(id: string, before: AppointmentDocument, updated: AppointmentDocument): void {
+    if (updated.status !== AppointmentStatus.SCHEDULED) {
+      this.notify('reschedule-request', id, this.messaging.sendBookingRequestReceived(updated.phone, updated.name, updated.date, updated.time));
+      return;
+    }
+    const sendConfirmation = () => this.messaging.sendBookingConfirmation(updated.phone, updated.name, updated.date, updated.time);
+    if (before.status !== AppointmentStatus.SCHEDULED) {
+      this.notify('reschedule', id, sendConfirmation());
+      return;
+    }
+    this.notifyInOrder(id, [
+      { kind: 'reschedule-cancelled', send: () => this.messaging.sendBookingCancelled(before.phone, before.name, before.date, before.time) },
+      { kind: 'reschedule', send: sendConfirmation },
+    ]);
   }
 
   // hours from clinic-now until the given clinic-local date+time. Both sides are

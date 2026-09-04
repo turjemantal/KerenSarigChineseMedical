@@ -16,6 +16,9 @@ export const bookingRequestParams = bookingParams;
 // booking_rejected template: {{1}} = first name, {{2}} = date, {{3}} = time
 export const bookingRejectedParams = bookingParams;
 
+// booking_cancelled template: {{1}} = first name, {{2}} = date, {{3}} = time
+export const bookingCancelledParams = bookingParams;
+
 // appointment_reminder template: {{1}} = time, {{2}} = clinic address
 export const reminderParams = (time: string): string[] => [time, CLINIC_ADDRESS];
 
@@ -44,12 +47,23 @@ export const smsReminderText = (time: string): string =>
 export const smsBookingRejectedText = (name: string, date: string, time: string): string =>
   `שלום ${name.split(' ')[0]}, לצערנו לא נוכל לקבל את בקשתך לתור ב${formatHebrewDate(date)} בשעה ${time}. נשמח לעזור במועד אחר — ניתן לקבוע מחדש או ליצור קשר. ${CLINIC_NAME}`;
 
+export const smsBookingCancelledText = (name: string, date: string, time: string): string =>
+  `שלום ${name.split(' ')[0]}, התור שלך ב${formatHebrewDate(date)} בשעה ${time} בוטל. לקביעת תור חדש ניתן להיכנס לאתר. ${CLINIC_NAME}`;
+
 // admin alert — sent to the clinic owner when a new booking arrives
 export const smsNewBookingAlertText = (name: string, date: string, time: string): string =>
   `תור חדש ממתין לאישור: ${name}, ${formatHebrewDate(date)} בשעה ${time}. לאישור: היכנסי לממשק הניהול.`;
 
 // new_booking_alert template: {{1}} = name, {{2}} = date, {{3}} = time
 export const newBookingAlertParams = bookingParams;
+
+// admin alert — sent to the clinic owner when an appointment is cancelled (by her or
+// by the client), so a freed-up slot doesn't go unnoticed until she opens the dashboard
+export const smsCancellationAlertText = (name: string, date: string, time: string): string =>
+  `תור בוטל: ${name}, ${formatHebrewDate(date)} בשעה ${time}. המועד התפנה ביומן.`;
+
+// cancellation_alert template: {{1}} = name, {{2}} = date, {{3}} = time
+export const cancellationAlertParams = bookingParams;
 
 // admin alert — sent to the clinic owner when a new lead arrives from the website
 export const smsNewLeadAlertText = (name: string, phone: string, concern: string): string =>

@@ -31,6 +31,8 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 - **Editable weekly schedule** — the base bookable hours per weekday live in the DB and are edited from the admin dashboard (no hardcoded schedule); provisioned by initDB on a fresh DB (`server/migrations/init/`) or the on-demand script `scripts/v2/seed-weekly-schedule.ts`
 - **Clinic settings** — admin-configurable booking horizon (days ahead) and daily-reminder hour, stored in the DB and editable from the dashboard (no redeploy needed); read DB-only (the app never seeds defaults — see `server/migrations/`)
 - **Approval flow** — bookings start as *pending*; the client gets a "request received" message, and the confirmation SMS is sent only when the admin approves (from the dashboard home, appointments list, or detail drawer). The admin can also **reject** a pending request (distinct `rejected` status) — the client is notified it couldn't be accommodated
+- **Cancellation notices** — cancelling a confirmed appointment (by the client from the portal, or by the admin from the dashboard) messages the client that it was cancelled and alerts the clinic owner (`ADMIN_PHONE`) that the slot has freed up, so a cancellation is never discovered only by opening the dashboard
+- **Reschedule messaging** — moving a *confirmed* appointment sends two messages in a guaranteed order: the old slot is announced as cancelled, then the new slot as confirmed, so the client is never left thinking they hold two appointments. Moving a request that is still *pending* sends only the "request received" text for the new time — it is never described as approved
 - **Admin-created clients & appointments** — the admin can add a client directly (name required, unique phone) and book a confirmed appointment for an existing client, found via a name/phone search; the slot still passes the server's availability check and the client gets a confirmation SMS
 - **Schedule blocks** — admin can close hours, full days, or vacation ranges from the calendar; blocked slots are hidden in booking and rejected by the API. A timed block closes every slot whose **50-minute window overlaps it**, not just one whose start time falls inside it (a 09:00 slot runs to 09:50 and is therefore closed by a 09:30–11:00 block; a slot ending exactly when the block starts stays open). Extra slots (one-off opened times) are rejected if within 50 minutes of a base weekly time or another extra slot
 - **Client portal** — authenticated clients view, cancel, reschedule, and **book new appointments directly from the portal** (opens the booking calendar in place — no navigation away); reschedule allowed only within the free window, ≥24h before; enforced server-side; after a successful reschedule the card refreshes in place
@@ -63,7 +65,7 @@ A full-stack clinic management platform. Clients submit enquiries and book appoi
 | **Registry** | Amazon ECR |
 | **Hosting** | AWS EC2 |
 | **CI** | GitHub Actions |
-| **Testing** | Jest + ts-jest (299 tests) |
+| **Testing** | Jest + ts-jest (329 tests) |
 
 ---
 
@@ -236,6 +238,8 @@ Required in `DEV` / `PROD`:
 | `WHATSAPP_TEMPLATE_BOOKING_CONFIRMATION` | Approved template name for booking confirmation |
 | `WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER` | Approved template name for reminders — takes `{{1}}` = time and `{{2}}` = clinic address (update the Meta template if it still declares only `{{1}}`) |
 | `WHATSAPP_TEMPLATE_BOOKING_REJECTED` | *(optional)* template for the "request declined" notice — no fallback; the WhatsApp notice is skipped until this is approved + set (SMS sends regardless) |
+| `WHATSAPP_TEMPLATE_BOOKING_CANCELLED` | *(optional)* template for the client's "appointment cancelled" notice, also used for the old-slot half of a reschedule — no fallback, same rule as above |
+| `WHATSAPP_TEMPLATE_CANCELLATION_ALERT` | *(optional)* admin alert template for cancellations — no fallback (a confirmation template would tell the owner her own appointment was confirmed) |
 | `WHATSAPP_TEMPLATE_LEAD_ALERT` | *(optional)* template for new-lead owner alerts (falls back to booking confirmation) |
 | `WHATSAPP_API_VERSION` | API version — default: `v21.0` |
 
@@ -248,7 +252,7 @@ cd server
 npm test
 ```
 
-312 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, configurable reminders + manual resend, Google Calendar sync for pending/approved/rejected/cancelled/deleted appointments), weekly schedule (incl. the 50-minute spacing rule), extra slots, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
+329 server-side Jest tests covering auth, appointments (incl. admin-created, client + admin reschedule, reschedule-auto-approve, reject, cancellation notices + admin cancellation alerts, configurable reminders + manual resend, Google Calendar sync for pending/approved/rejected/cancelled/deleted appointments), weekly schedule (incl. the 50-minute spacing rule), extra slots, clinic settings, leads (incl. owner alerts), clients, SMS provider, WhatsApp provider, health, and validation.
 
 ---
 

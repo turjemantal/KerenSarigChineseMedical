@@ -54,6 +54,46 @@ describe('WhatsappMessagingProvider', () => {
     });
   });
 
+  // Mirrors the booking_rejected contract: with no dedicated template approved there is
+  // no sensible fallback, so the send is skipped rather than fired at the API.
+  describe('sendBookingCancelled', () => {
+    it('resolves false without calling the API when no template is configured', async () => {
+      const sent = await provider.sendBookingCancelled('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      expect(sent).toBe(false);
+      expect(mockWhatsapp.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('sends the configured template with first name, Hebrew date, and time', async () => {
+      process.env.WHATSAPP_TEMPLATE_BOOKING_CANCELLED = 'booking_cancelled';
+      await provider.sendBookingCancelled('0501234567', 'Alice Smith', '2026-05-01', '09:00');
+      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
+        '0501234567',
+        'booking_cancelled',
+        ['Alice', '1 במאי 2026', '09:00'],
+      );
+      delete process.env.WHATSAPP_TEMPLATE_BOOKING_CANCELLED;
+    });
+  });
+
+  describe('sendCancellationAlert', () => {
+    it('resolves false without calling the API when no template is configured', async () => {
+      const sent = await provider.sendCancellationAlert('0509999999', 'Alice Smith', '2026-05-01', '09:00');
+      expect(sent).toBe(false);
+      expect(mockWhatsapp.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('sends the configured template when one is set', async () => {
+      process.env.WHATSAPP_TEMPLATE_CANCELLATION_ALERT = 'cancellation_alert';
+      await provider.sendCancellationAlert('0509999999', 'Alice Smith', '2026-05-01', '09:00');
+      expect(mockWhatsapp.sendTemplate).toHaveBeenCalledWith(
+        '0509999999',
+        'cancellation_alert',
+        ['Alice', '1 במאי 2026', '09:00'],
+      );
+      delete process.env.WHATSAPP_TEMPLATE_CANCELLATION_ALERT;
+    });
+  });
+
   describe('sendBookingRequestReceived', () => {
     it('sends the booking_request template with the same parameter shape', async () => {
       await provider.sendBookingRequestReceived('0501234567', 'Alice Smith', '2026-05-01', '09:00');
